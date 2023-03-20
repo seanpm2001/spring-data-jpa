@@ -15,12 +15,7 @@
  */
 package org.springframework.data.jpa.repository.support;
 
-import static org.springframework.data.jpa.repository.query.QueryUtils.COUNT_QUERY_STRING;
-import static org.springframework.data.jpa.repository.query.QueryUtils.DELETE_ALL_QUERY_BY_ID_STRING;
-import static org.springframework.data.jpa.repository.query.QueryUtils.DELETE_ALL_QUERY_STRING;
-import static org.springframework.data.jpa.repository.query.QueryUtils.applyAndBind;
-import static org.springframework.data.jpa.repository.query.QueryUtils.getQueryString;
-import static org.springframework.data.jpa.repository.query.QueryUtils.toOrders;
+import static org.springframework.data.jpa.repository.query.QueryUtils.*;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
@@ -268,8 +263,24 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 			return;
 		}
 
-		applyAndBind(getQueryString(DELETE_ALL_QUERY_STRING, entityInformation.getEntityName()), entities, em)
-				.executeUpdate();
+		if (entityInformation.hasCompositeId()) {
+			applyAndBind(getQueryString(DELETE_ALL_QUERY_STRING, entityInformation.getEntityName()), entities, em)
+					.executeUpdate();
+		} else {
+
+			CriteriaBuilder builder = this.em.getCriteriaBuilder();
+			CriteriaDelete<T> delete = builder.createCriteriaDelete(getDomainClass());
+
+			Root<T> root = delete.from(getDomainClass());
+
+			List<?> entityIds = Streamable.of(entities) //
+					.map(entityInformation::getId) //
+					.toList();
+
+			delete.where(root.get(entityInformation.getIdAttribute()).in(entityIds));
+
+			this.em.createQuery(delete).executeUpdate();
+		}
 	}
 
 	@Override
