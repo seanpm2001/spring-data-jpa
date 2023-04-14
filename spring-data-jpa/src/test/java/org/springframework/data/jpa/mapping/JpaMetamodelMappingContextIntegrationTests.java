@@ -144,10 +144,9 @@ class JpaMetamodelMappingContextIntegrationTests {
 			IdentifierAccessor accessor = entity.getIdentifierAccessor(loadedProduct);
 
 			assertThat(accessor.getIdentifier()).isEqualTo(category.getProduct().getId());
-
-			if (loadedProduct instanceof HibernateProxy proxy) {
-				assertThat(proxy.getHibernateLazyInitializer().isUninitialized()).isTrue();
-			}
+			assertThat(loadedProduct).isInstanceOfSatisfying(HibernateProxy.class, it -> {
+				assertThat(it.getHibernateLazyInitializer().isUninitialized()).isTrue();
+			});
 
 			status.setRollbackOnly();
 

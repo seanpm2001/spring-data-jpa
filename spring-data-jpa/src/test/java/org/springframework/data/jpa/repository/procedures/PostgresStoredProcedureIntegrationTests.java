@@ -16,7 +16,7 @@
 
 package org.springframework.data.jpa.repository.procedures;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityManagerFactory;
@@ -36,7 +36,6 @@ import java.util.Properties;
 import javax.sql.DataSource;
 
 import org.hibernate.dialect.PostgreSQLDialect;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.postgresql.ds.PGSimpleDataSource;
@@ -68,7 +67,6 @@ import org.testcontainers.containers.PostgreSQLContainer;
  * @author Greg Turnquist
  * @author Yanming Zhou
  */
-@Disabled
 @Transactional
 @ExtendWith(SpringExtension.class)
 @ContextConfiguration(classes = PostgresStoredProcedureIntegrationTests.Config.class)
@@ -161,8 +159,7 @@ class PostgresStoredProcedureIntegrationTests {
 			resultClasses = Employee.class)
 	public static class Employee {
 
-		@Id
-		@GeneratedValue private Integer id;
+		@Id @GeneratedValue private Integer id;
 		private String name;
 	}
 
