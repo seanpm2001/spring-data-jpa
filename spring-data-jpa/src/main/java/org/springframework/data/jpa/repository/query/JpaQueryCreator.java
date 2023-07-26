@@ -191,7 +191,8 @@ public class JpaQueryCreator extends AbstractQueryCreator<CriteriaQuery<? extend
 			query = query.select((Root) root);
 		}
 
-		CriteriaQuery<? extends Object> select = query.orderBy(QueryUtils.toOrders(sort, root, builder));
+		CriteriaQuery<? extends Object> select = query
+				.orderBy(QueryUtils.toOrders(sort, root, builder, query.isDistinct()));
 		return predicate == null ? select : select.where(predicate);
 	}
 
@@ -384,7 +385,7 @@ public class JpaQueryCreator extends AbstractQueryCreator<CriteriaQuery<? extend
 		}
 
 		private <T> Expression<T> getTypedPath(Root<?> root, Part part) {
-			return toExpressionRecursively(root, part.getProperty());
+			return toExpressionRecursively(root, part.getProperty(), false);
 		}
 
 		private <T> Expression<T> traversePath(Path<?> root, PropertyPath path) {

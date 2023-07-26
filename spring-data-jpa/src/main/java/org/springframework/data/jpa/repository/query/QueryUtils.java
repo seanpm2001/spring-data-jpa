@@ -677,7 +677,8 @@ public abstract class QueryUtils {
 	 * @param cb must not be {@literal null}.
 	 * @return a {@link List} of {@link jakarta.persistence.criteria.Order}s.
 	 */
-	public static List<jakarta.persistence.criteria.Order> toOrders(Sort sort, From<?, ?> from, CriteriaBuilder cb) {
+	public static List<jakarta.persistence.criteria.Order> toOrders(Sort sort, From<?, ?> from, CriteriaBuilder cb,
+			boolean distinct) {
 
 		if (sort.isUnsorted()) {
 			return Collections.emptyList();
@@ -689,7 +690,7 @@ public abstract class QueryUtils {
 		List<jakarta.persistence.criteria.Order> orders = new ArrayList<>();
 
 		for (org.springframework.data.domain.Sort.Order order : sort) {
-			orders.add(toJpaOrder(order, from, cb));
+			orders.add(toJpaOrder(order, from, cb, distinct));
 		}
 
 		return orders;
@@ -734,10 +735,11 @@ public abstract class QueryUtils {
 	 * @return Guaranteed to be not {@literal null}.
 	 */
 	@SuppressWarnings("unchecked")
-	private static jakarta.persistence.criteria.Order toJpaOrder(Order order, From<?, ?> from, CriteriaBuilder cb) {
+	private static jakarta.persistence.criteria.Order toJpaOrder(Order order, From<?, ?> from, CriteriaBuilder cb,
+			boolean distinct) {
 
 		PropertyPath property = PropertyPath.from(order.getProperty(), from.getJavaType());
-		Expression<?> expression = toExpressionRecursively(from, property);
+		Expression<?> expression = toExpressionRecursively(from, property, distinct);
 
 		if (order.isIgnoreCase() && String.class.equals(expression.getJavaType())) {
 			Expression<String> upper = cb.lower((Expression<String>) expression);
@@ -747,12 +749,17 @@ public abstract class QueryUtils {
 		}
 	}
 
-	static <T> Expression<T> toExpressionRecursively(From<?, ?> from, PropertyPath property) {
-		return toExpressionRecursively(from, property, false);
+	static <T> Expression<T> toExpressionRecursively(From<?, ?> from, PropertyPath propertyPath) {
+		return toExpressionRecursively(from, propertyPath, false, false);
 	}
 
-	static <T> Expression<T> toExpressionRecursively(From<?, ?> from, PropertyPath property, boolean isForSelection) {
-		return toExpressionRecursively(from, property, isForSelection, false);
+	static <T> Expression<T> toExpressionRecursively(From<?, ?> from, PropertyPath property, boolean distinct) {
+		return toExpressionRecursively(from, property, false, distinct);
+	}
+
+	static <T> Expression<T> toExpressionRecursively(From<?, ?> from, PropertyPath property, boolean isForSelection,
+			boolean distinct) {
+		return toExpressionRecursively(from, property, isForSelection, false, distinct);
 	}
 
 	/**
@@ -767,7 +774,7 @@ public abstract class QueryUtils {
 	 */
 	@SuppressWarnings("unchecked")
 	static <T> Expression<T> toExpressionRecursively(From<?, ?> from, PropertyPath property, boolean isForSelection,
-			boolean hasRequiredOuterJoin) {
+			boolean hasRequiredOuterJoin, boolean distinct) {
 
 		String segment = property.getSegment();
 
@@ -782,7 +789,7 @@ public abstract class QueryUtils {
 
 		// get or create the join
 		JoinType joinType = requiresOuterJoin ? JoinType.LEFT : JoinType.INNER;
-		Join<?, ?> join = getOrCreateJoin(from, segment, joinType);
+		Join<?, ?> join = getOrCreateJoin(from, segment, joinType, distinct);
 
 		// if it's a leaf, return the join
 		if (isLeafProperty) {
@@ -898,15 +905,24 @@ public abstract class QueryUtils {
 	 * @param joinType the join type to create if none was found
 	 * @return will never be {@literal null}.
 	 */
-	private static Join<?, ?> getOrCreateJoin(From<?, ?> from, String attribute, JoinType joinType) {
+	private static Join<?, ?> getOrCreateJoin(From<?, ?> from, String attribute, JoinType joinType, boolean distinct) {
 
-		for (Join<?, ?> join : from.getJoins()) {
+		for (Fetch<?, ?> fetch : from.getFetches()) {
+			if (fetch.getAttribute().getName().equals(attribute))
+				return (Join<?, ?>) fetch;
+		}
 
-			if (join.getAttribute().getName().equals(attribute)) {
-				return join;
+		if (!distinct) {
+			for (Join<?, ?> join : from.getJoins()) {
+				if (join.getAttribute().getName().equals(attribute)) {
+					return join;
+				}
 			}
 		}
-		return from.join(attribute, joinType);
+
+		return distinct //
+				? (Join<?, ?>) from.fetch(attribute, joinType) //
+				: from.join(attribute, joinType);
 	}
 
 	/**

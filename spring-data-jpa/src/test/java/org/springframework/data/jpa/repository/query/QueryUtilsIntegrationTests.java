@@ -15,11 +15,9 @@
  */
 package org.springframework.data.jpa.repository.query;
 
-import static java.util.Collections.singletonList;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
+import static java.util.Collections.*;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityManager;
@@ -310,7 +308,7 @@ class QueryUtilsIntegrationTests {
 
 		Sort sort = Sort.by(Direction.ASC, "age");
 
-		List<jakarta.persistence.criteria.Order> orders = QueryUtils.toOrders(sort, join, builder);
+		List<jakarta.persistence.criteria.Order> orders = QueryUtils.toOrders(sort, join, builder, query.isDistinct());
 
 		assertThat(orders).hasSize(1);
 	}

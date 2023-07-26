@@ -749,7 +749,7 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 		query.select(root);
 
 		if (sort.isSorted()) {
-			query.orderBy(toOrders(sort, root, builder));
+			query.orderBy(toOrders(sort, root, builder, query.isDistinct()));
 		}
 
 		return applyRepositoryMethodMetadata(em.createQuery(query));
