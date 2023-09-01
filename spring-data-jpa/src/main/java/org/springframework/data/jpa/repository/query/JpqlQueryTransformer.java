@@ -125,6 +125,10 @@ class JpqlQueryTransformer extends JpqlQueryRenderer {
 			}
 		}
 
+		ctx.setOperator_with_select_statement().forEach(setOperatorWithSelectStatementContext -> {
+			tokens.addAll(visit(setOperatorWithSelectStatementContext));
+		});
+
 		return tokens;
 	}
 
