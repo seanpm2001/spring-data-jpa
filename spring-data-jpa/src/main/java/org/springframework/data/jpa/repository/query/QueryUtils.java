@@ -689,8 +689,23 @@ public abstract class QueryUtils {
 
 		List<jakarta.persistence.criteria.Order> orders = new ArrayList<>();
 
-		for (org.springframework.data.domain.Sort.Order order : sort) {
+		for (Sort.Order order : sort) {
 			orders.add(toJpaOrder(order, from, cb));
+		}
+
+		return orders;
+	}
+
+	public static List<String> toOrders(Sort sort, Class<?> domainClass) {
+
+		if (sort.isUnsorted()) {
+			return List.of();
+		}
+
+		List<String> orders = new ArrayList<>();
+
+		for (Sort.Order order : sort) {
+			orders.add(toJpaOrder(order, domainClass));
 		}
 
 		return orders;
@@ -746,6 +761,43 @@ public abstract class QueryUtils {
 		} else {
 			return order.isAscending() ? cb.asc(expression) : cb.desc(expression);
 		}
+	}
+
+	private static String toJpaOrder(Order order, Class<?> domainClass) {
+
+		if (order instanceof JpaOrder jpaOrder && jpaOrder.isUnsafe()) {
+			return jpaOrder.getProperty() + " " + jpaOrder.getDirection();
+		}
+
+		PropertyPath property = PropertyPath.from(order.getProperty(), domainClass);
+		String expression = toExpressionRecursively(domainClass, property);
+
+		if (order.isIgnoreCase() && String.class.equals(property.getType())) {
+			String upper = "upper(" + expression + ")";
+			return order.isAscending() ? upper + " asc" : upper + " desc";
+		} else {
+			return order.isAscending() ? expression + " asc" : expression + " desc";
+		}
+	}
+
+	static String toExpressionRecursively(Class<?> domainClass, PropertyPath property) {
+
+		String simpleAlias = domainClass.getSimpleName().substring(0, 1).toLowerCase();
+
+		String expression = simpleAlias + "." + property.getSegment();
+
+		return property.hasNext() //
+				? toExpressionRecursively(expression + ".", property.next()) //
+				: expression;
+	}
+
+	static String toExpressionRecursively(String accum, PropertyPath property) {
+
+		String expression = accum + property.getSegment();
+
+		return property.hasNext() //
+				? toExpressionRecursively(expression + ".", property.next()) //
+				: expression;
 	}
 
 	static <T> Expression<T> toExpressionRecursively(From<?, ?> from, PropertyPath property) {

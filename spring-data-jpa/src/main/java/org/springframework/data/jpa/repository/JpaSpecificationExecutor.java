@@ -27,6 +27,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.domain.StringSpecification;
 import org.springframework.data.repository.query.FluentQuery;
 
 /**
@@ -64,6 +65,8 @@ public interface JpaSpecificationExecutor<T> {
 	 * @return never {@literal null}.
 	 */
 	Page<T> findAll(Specification<T> spec, Pageable pageable);
+
+	Page<T> findAll(StringSpecification<T> spec, Pageable pageable);
 
 	/**
 	 * Returns all entities matching the given {@link Specification} and {@link Sort}.
@@ -118,5 +121,4 @@ public interface JpaSpecificationExecutor<T> {
 	 * @since 3.0
 	 */
 	<S extends T, R> R findBy(Specification<T> spec, Function<FluentQuery.FetchableFluentQuery<S>, R> queryFunction);
-
 }

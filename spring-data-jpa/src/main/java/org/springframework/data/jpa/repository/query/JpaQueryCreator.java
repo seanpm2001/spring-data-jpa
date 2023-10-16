@@ -308,8 +308,9 @@ public class JpaQueryCreator extends AbstractQueryCreator<CriteriaQuery<? extend
 				case SIMPLE_PROPERTY:
 					ParameterMetadata<Object> expression = provider.next(part);
 					Expression<Object> path = getTypedPath(root, part);
-					return expression.isIsNullParameter() ? path.isNull()
+					Predicate predicate = expression.isIsNullParameter() ? path.isNull()
 							: builder.equal(upperIfIgnoreCase(path), upperIfIgnoreCase(expression.getExpression()));
+					return predicate;
 				case NEGATING_SIMPLE_PROPERTY:
 					return builder.notEqual(upperIfIgnoreCase(getTypedPath(root, part)),
 							upperIfIgnoreCase(provider.next(part).getExpression()));

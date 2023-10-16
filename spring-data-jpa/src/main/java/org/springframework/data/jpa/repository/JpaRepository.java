@@ -20,7 +20,9 @@ import java.util.List;
 import jakarta.persistence.EntityManager;
 
 import org.springframework.data.domain.Example;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.StringSpecification;
 import org.springframework.data.repository.ListCrudRepository;
 import org.springframework.data.repository.ListPagingAndSortingRepository;
 import org.springframework.data.repository.NoRepositoryBean;
@@ -152,4 +154,5 @@ public interface JpaRepository<T, ID> extends ListCrudRepository<T, ID>, ListPag
 
 	@Override
 	<S extends T> List<S> findAll(Example<S> example, Sort sort);
+
 }

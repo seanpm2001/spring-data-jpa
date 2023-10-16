@@ -52,6 +52,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.convert.QueryByExamplePredicateBuilder;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.domain.StringSpecification;
 import org.springframework.data.jpa.provider.PersistenceProvider;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.query.EscapeCharacter;
@@ -271,8 +272,7 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 			return;
 		}
 
-		applyAndBind(getQueryString(DELETE_ALL_QUERY_STRING, entityInformation.getEntityName()), entities,
-				entityManager)
+		applyAndBind(getQueryString(DELETE_ALL_QUERY_STRING, entityInformation.getEntityName()), entities, entityManager)
 				.executeUpdate();
 	}
 
@@ -310,7 +310,8 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 		LockModeType type = metadata.getLockModeType();
 		Map<String, Object> hints = getHints();
 
-		return Optional.ofNullable(type == null ? entityManager.find(domainType, id, hints) : entityManager.find(domainType, id, type, hints));
+		return Optional.ofNullable(
+				type == null ? entityManager.find(domainType, id, hints) : entityManager.find(domainType, id, type, hints));
 	}
 
 	@Deprecated
@@ -380,7 +381,7 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 
 	@Override
 	public List<T> findAll() {
-		return getQuery(null, Sort.unsorted()).getResultList();
+		return getQuery((StringSpecification<T>) null, Sort.unsorted()).getResultList();
 	}
 
 	@Override
@@ -413,7 +414,7 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 
 	@Override
 	public List<T> findAll(Sort sort) {
-		return getQuery(null, sort).getResultList();
+		return getQuery((StringSpecification<T>) null, sort).getResultList();
 	}
 
 	@Override
@@ -423,7 +424,7 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 			return new PageImpl<>(findAll());
 		}
 
-		return findAll((Specification<T>) null, pageable);
+		return findAll((StringSpecification<T>) null, pageable);
 	}
 
 	@Override
@@ -443,6 +444,14 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 
 	@Override
 	public Page<T> findAll(Specification<T> spec, Pageable pageable) {
+
+		TypedQuery<T> query = getQuery(spec, pageable);
+		return pageable.isUnpaged() ? new PageImpl<>(query.getResultList())
+				: readPage(query, getDomainClass(), pageable, spec);
+	}
+
+	@Override
+	public Page<T> findAll(StringSpecification<T> spec, Pageable pageable) {
 
 		TypedQuery<T> query = getQuery(spec, pageable);
 		return pageable.isUnpaged() ? new PageImpl<>(query.getResultList())
@@ -698,6 +707,18 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 				() -> executeCountQuery(getCountQuery(spec, domainClass)));
 	}
 
+	protected Page<T> readPage(TypedQuery<T> query, Class<T> domainClass, Pageable pageable,
+			StringSpecification<T> spec) {
+
+		if (pageable.isPaged()) {
+			query.setFirstResult(PageableUtils.getOffsetAsInteger(pageable));
+			query.setMaxResults(pageable.getPageSize());
+		}
+
+		return PageableExecutionUtils.getPage(query.getResultList(), pageable,
+				() -> executeCountQuery(getCountQuery(spec, domainClass)));
+	}
+
 	/**
 	 * Creates a new {@link TypedQuery} from the given {@link Specification}.
 	 *
@@ -705,6 +726,12 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 	 * @param pageable must not be {@literal null}.
 	 */
 	protected TypedQuery<T> getQuery(@Nullable Specification<T> spec, Pageable pageable) {
+
+		Sort sort = pageable.isPaged() ? pageable.getSort() : Sort.unsorted();
+		return getQuery(spec, getDomainClass(), sort);
+	}
+
+	protected TypedQuery<T> getQuery(@Nullable StringSpecification<T> spec, Pageable pageable) {
 
 		Sort sort = pageable.isPaged() ? pageable.getSort() : Sort.unsorted();
 		return getQuery(spec, getDomainClass(), sort);
@@ -734,6 +761,10 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 		return getQuery(spec, getDomainClass(), sort);
 	}
 
+	protected TypedQuery<T> getQuery(@Nullable StringSpecification<T> spec, Sort sort) {
+		return getQuery(spec, getDomainClass(), sort);
+	}
+
 	/**
 	 * Creates a {@link TypedQuery} for the given {@link Specification} and {@link Sort}.
 	 *
@@ -749,11 +780,42 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 		Root<S> root = applySpecificationToCriteria(spec, domainClass, query);
 		query.select(root);
 
+		return applyRepositoryMethodMetadata(entityManager.createQuery(query));
+	}
+
+	protected <S extends T> TypedQuery<S> getQuery(@Nullable StringSpecification<S> spec, Class<S> domainClass,
+			Sort sort) {
+
+		String simpleName = domainClass.getSimpleName();
+		String simpleAlias = simpleName.substring(0, 1).toLowerCase();
+		String selectClause = String.format("select %s from %s %s ", simpleAlias, simpleName, simpleAlias);
+
+		String query = selectClause;
+
+		query += applySpecificationToQuery(spec, domainClass, query);
+
+		// TODO: Apply specification
+
 		if (sort.isSorted()) {
-			query.orderBy(toOrders(sort, root, builder));
+			List<String> orderBy = toOrders(sort, domainClass);
+
+			String orders = orderBy.stream().collect(Collectors.joining(","));
+
+			query += " order by " + orders;
+
+			// query.orderBy(toOrders(sort, root, builder));
 		}
 
-		return applyRepositoryMethodMetadata(entityManager.createQuery(query));
+		System.out.println("About to create query <" + query + ">");
+
+		TypedQuery<S> query1 = entityManager.createQuery(query, domainClass);
+		TypedQuery<S> sTypedQuery = applyRepositoryMethodMetadata(query1);
+		return sTypedQuery;
+	}
+
+	private <S extends T> String applySpecificationToQuery(@Nullable StringSpecification<S> spec, Class<S> domainClass,
+			String query) {
+		return spec == null ? "" : " where " + spec.toStringPredicate(domainClass, query);
 	}
 
 	/**
@@ -790,6 +852,21 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 		query.orderBy(Collections.emptyList());
 
 		return applyRepositoryMethodMetadataForCount(entityManager.createQuery(query));
+	}
+
+	protected <S extends T> TypedQuery<Long> getCountQuery(@Nullable StringSpecification<S> spec, Class<S> domainClass) {
+
+		String simpleName = domainClass.getSimpleName();
+		String simpleAlias = simpleName.substring(0, 1).toLowerCase();
+		String selectClause = String.format("select count(%s) from %s %s", simpleAlias, simpleName, simpleAlias);
+
+		String query = selectClause;
+
+		query += applySpecificationToQuery(spec, domainClass, query);
+
+		System.out.println("About to create count query <" + query + ">");
+
+		return applyRepositoryMethodMetadataForCount(entityManager.createQuery(query, Long.class));
 	}
 
 	/**

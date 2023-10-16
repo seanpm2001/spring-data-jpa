@@ -15,13 +15,12 @@
  */
 package org.springframework.data.jpa.repository.support;
 
-import static java.util.Collections.singletonMap;
-import static org.assertj.core.api.Assertions.assertThatNoException;
+import static java.util.Collections.*;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-import static org.springframework.data.jpa.domain.Specification.where;
+import static org.springframework.data.jpa.domain.Specification.*;
 
 import jakarta.persistence.EntityGraph;
 import jakarta.persistence.EntityManager;
@@ -86,7 +85,9 @@ class SimpleJpaRepositoryUnitTests {
 		when(builder.createQuery(Long.class)).thenReturn(countCriteriaQuery);
 
 		when(em.createQuery(criteriaQuery)).thenReturn(query);
+		when(em.createQuery(anyString(), eq(User.class))).thenReturn(query);
 		when(em.createQuery(countCriteriaQuery)).thenReturn(countQuery);
+		when(em.createQuery(anyString(), eq(Long.class))).thenReturn(countQuery);
 
 		MutableQueryHints hints = new MutableQueryHints();
 		when(metadata.getQueryHints()).thenReturn(hints);

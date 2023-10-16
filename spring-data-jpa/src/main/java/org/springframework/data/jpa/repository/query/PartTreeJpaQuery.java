@@ -34,6 +34,7 @@ import org.springframework.data.jpa.repository.query.JpaQueryExecution.ExistsExe
 import org.springframework.data.jpa.repository.query.JpaQueryExecution.ScrollExecution;
 import org.springframework.data.jpa.repository.query.ParameterMetadataProvider.ParameterMetadata;
 import org.springframework.data.jpa.repository.support.JpaMetamodelEntityInformation;
+import org.springframework.data.repository.query.Parameter;
 import org.springframework.data.repository.query.ResultProcessor;
 import org.springframework.data.repository.query.ReturnedType;
 import org.springframework.data.repository.query.parser.Part;
@@ -99,8 +100,8 @@ public class PartTreeJpaQuery extends AbstractJpaQuery {
 
 			this.tree = new PartTree(method.getName(), domainClass);
 			validate(tree, parameters, method.toString());
-			this.countQuery = new CountQueryPreparer(recreationRequired);
-			this.query = tree.isCountProjection() ? countQuery : new QueryPreparer(recreationRequired);
+			this.countQuery = new StringBasedCountQueryPreparer(recreationRequired);
+			this.query = tree.isCountProjection() ? countQuery : new StringBasedQueryPreparer(recreationRequired);
 
 		} catch (Exception o_O) {
 			throw new IllegalArgumentException(
@@ -195,19 +196,198 @@ public class PartTreeJpaQuery extends AbstractJpaQuery {
 		return type == Type.IN || type == Type.NOT_IN;
 	}
 
+	private abstract class QueryPreparer {
+
+		abstract Query createQuery(JpaParametersParameterAccessor accessor);
+
+		/**
+		 * Restricts the max results of the given {@link Query} if the current {@code tree} marks this {@code query} as
+		 * limited.
+		 */
+		@SuppressWarnings("ConstantConditions")
+		protected Query restrictMaxResultsIfNecessary(Query query, @Nullable ScrollPosition scrollPosition) {
+
+			if (scrollPosition instanceof OffsetScrollPosition offset) {
+				query.setFirstResult(Math.toIntExact(offset.getOffset()));
+			}
+
+			if (tree.isLimiting()) {
+
+				if (query.getMaxResults() != Integer.MAX_VALUE) {
+					/*
+					 * In order to return the correct results, we have to adjust the first result offset to be returned if:
+					 * - a Pageable parameter is present
+					 * - AND the requested page number > 0
+					 * - AND the requested page size was bigger than the derived result limitation via the First/Top keyword.
+					 */
+					if (query.getMaxResults() > tree.getMaxResults() && query.getFirstResult() > 0) {
+						query.setFirstResult(query.getFirstResult() - (query.getMaxResults() - tree.getMaxResults()));
+					}
+				}
+
+				query.setMaxResults(tree.getMaxResults());
+			}
+
+			if (tree.isExistsProjection()) {
+				query.setMaxResults(1);
+			}
+
+			return query;
+		}
+
+		/**
+		 * Invokes parameter binding on the given {@link TypedQuery}.
+		 */
+		protected Query invokeBinding(ParameterBinder binder, TypedQuery<?> query, JpaParametersParameterAccessor accessor,
+				QueryParameterSetter.QueryMetadataCache metadataCache) {
+
+			QueryParameterSetter.QueryMetadata metadata = metadataCache.getMetadata("query", query);
+
+			return binder.bindAndPrepare(query, metadata, accessor);
+		}
+
+		protected ParameterBinder getBinder(List<ParameterMetadata<?>> expressions) {
+			return ParameterBinderFactory.createCriteriaBinder(parameters, expressions);
+		}
+
+		protected Sort getDynamicSort(JpaParametersParameterAccessor accessor) {
+
+			return accessor.getParameters().potentiallySortsDynamically() //
+					? accessor.getSort() //
+					: Sort.unsorted();
+		}
+	}
+
+	private class StringBasedQueryPreparer extends QueryPreparer {
+
+		private final @Nullable String cachedQuery;
+
+		private final @Nullable ParameterBinder cachedParameterBinder;
+
+		private final @Nullable Class<?> cachedReturnedType;
+
+		private final QueryParameterSetter.QueryMetadataCache metadataCache = new QueryParameterSetter.QueryMetadataCache();
+
+		public StringBasedQueryPreparer(boolean recreateQueries) {
+
+			JpaStringBasedQueryCreator creator = createCreator(null);
+
+			if (recreateQueries) {
+				this.cachedQuery = null;
+				this.cachedParameterBinder = null;
+				this.cachedReturnedType = null;
+			} else {
+				this.cachedQuery = creator.createQuery();
+				this.cachedParameterBinder = null;
+				// this.cachedParameterBinder = ParameterBinderFactory.createBinder((JpaParametersParameterAccessor) null);
+				this.cachedReturnedType = creator.getReturnedType();
+			}
+		}
+
+		@Override
+		public Query createQuery(JpaParametersParameterAccessor accessor) {
+
+			String stringQuery = cachedQuery;
+			ParameterBinder parameterBinder = cachedParameterBinder;
+			Class<?> returnedType = cachedReturnedType;
+
+			if (cachedQuery == null || accessor.hasBindableNullValue()) {
+
+				JpaStringBasedQueryCreator creator = createCreator(accessor);
+				returnedType = creator.getReturnedType();
+				Sort dynamicSort = getDynamicSort(accessor);
+				stringQuery = creator.createQuery(dynamicSort);
+				System.out.println(stringQuery);
+			}
+
+			parameterBinder = ParameterBinderFactory.createBinder((JpaParameters) accessor.getParameters());
+
+			if (parameterBinder == null) {
+				throw new IllegalStateException("ParameterBinder is null");
+			}
+
+			TypedQuery<?> query = createQuery(stringQuery, returnedType);
+
+			ScrollPosition scrollPosition = accessor.getParameters().hasScrollPositionParameter()
+					? accessor.getScrollPosition()
+					: null;
+			return restrictMaxResultsIfNecessary(invokeBinding(parameterBinder, query, accessor, this.metadataCache),
+					scrollPosition);
+		}
+
+		private TypedQuery<?> createQuery(String stringQuery, Class<?> returnedType) {
+
+			if (stringQuery == null) {
+				System.out.println("The query for " + getQueryMethod().getName() + " resulted in null");
+			}
+
+			if (this.cachedQuery != null) {
+				synchronized (this.cachedQuery) {
+					return getEntityManager().createQuery(stringQuery, returnedType);
+				}
+			}
+
+			return getEntityManager().createQuery(stringQuery, returnedType);
+		}
+
+		protected JpaStringBasedQueryCreator createCreator(JpaParametersParameterAccessor accessor) {
+
+			ResultProcessor processor = getQueryMethod().getResultProcessor();
+
+			ReturnedType returnedType;
+			Iterable<? extends Parameter> parameterProvider;
+
+			if (accessor != null) {
+
+				returnedType = processor.withDynamicProjection(accessor).getReturnedType();
+				parameterProvider = accessor.getParameters();
+			} else {
+
+				returnedType = processor.getReturnedType();
+				parameterProvider = parameters;
+			}
+
+			if (accessor != null && accessor.getScrollPosition() instanceof KeysetScrollPosition keyset) {
+				return new JpaStringBasedKeysetScrollQueryCreator(tree, parameterProvider, returnedType, entityInformation,
+						keyset);
+			}
+
+			return new JpaStringBasedQueryCreator(tree, parameterProvider, returnedType);
+		}
+	}
+
+	private class StringBasedCountQueryPreparer extends StringBasedQueryPreparer {
+
+		public StringBasedCountQueryPreparer(boolean recreateQueries) {
+			super(recreateQueries);
+		}
+
+		@Override
+		protected JpaStringBasedQueryCreator createCreator(JpaParametersParameterAccessor accessor) {
+
+			if (accessor != null) {
+				return new JpaStringBasedCountQueryCreator(tree, accessor.getParameters(),
+						getQueryMethod().getResultProcessor().getReturnedType());
+			} else {
+				return new JpaStringBasedCountQueryCreator(tree, parameters,
+						getQueryMethod().getResultProcessor().getReturnedType());
+			}
+		}
+	}
+
 	/**
 	 * Query preparer to create {@link CriteriaQuery} instances and potentially cache them.
 	 *
 	 * @author Oliver Gierke
 	 * @author Thomas Darimont
 	 */
-	private class QueryPreparer {
+	private class CriteriaBuilderQueryPreparer extends QueryPreparer {
 
 		private final @Nullable CriteriaQuery<?> cachedCriteriaQuery;
 		private final @Nullable ParameterBinder cachedParameterBinder;
 		private final QueryParameterSetter.QueryMetadataCache metadataCache = new QueryParameterSetter.QueryMetadataCache();
 
-		QueryPreparer(boolean recreateQueries) {
+		CriteriaBuilderQueryPreparer(boolean recreateQueries) {
 
 			JpaQueryCreator creator = createCreator(null);
 
@@ -249,41 +429,6 @@ public class PartTreeJpaQuery extends AbstractJpaQuery {
 		}
 
 		/**
-		 * Restricts the max results of the given {@link Query} if the current {@code tree} marks this {@code query} as
-		 * limited.
-		 */
-		@SuppressWarnings("ConstantConditions")
-		private Query restrictMaxResultsIfNecessary(Query query, @Nullable ScrollPosition scrollPosition) {
-
-			if (scrollPosition instanceof OffsetScrollPosition offset) {
-				query.setFirstResult(Math.toIntExact(offset.getOffset()));
-			}
-
-			if (tree.isLimiting()) {
-
-				if (query.getMaxResults() != Integer.MAX_VALUE) {
-					/*
-					 * In order to return the correct results, we have to adjust the first result offset to be returned if:
-					 * - a Pageable parameter is present
-					 * - AND the requested page number > 0
-					 * - AND the requested page size was bigger than the derived result limitation via the First/Top keyword.
-					 */
-					if (query.getMaxResults() > tree.getMaxResults() && query.getFirstResult() > 0) {
-						query.setFirstResult(query.getFirstResult() - (query.getMaxResults() - tree.getMaxResults()));
-					}
-				}
-
-				query.setMaxResults(tree.getMaxResults());
-			}
-
-			if (tree.isExistsProjection()) {
-				query.setMaxResults(1);
-			}
-
-			return query;
-		}
-
-		/**
 		 * Checks whether we are working with a cached {@link CriteriaQuery} and synchronizes the creation of a
 		 * {@link TypedQuery} instance from it. This is due to non-thread-safety in the {@link CriteriaQuery} implementation
 		 * of some persistence providers (i.e. Hibernate in this case), see DATAJPA-396.
@@ -319,33 +464,11 @@ public class PartTreeJpaQuery extends AbstractJpaQuery {
 				returnedType = processor.getReturnedType();
 			}
 
-			if (accessor != null && accessor.getScrollPosition()instanceof KeysetScrollPosition keyset) {
+			if (accessor != null && accessor.getScrollPosition() instanceof KeysetScrollPosition keyset) {
 				return new JpaKeysetScrollQueryCreator(tree, returnedType, builder, provider, entityInformation, keyset);
 			}
 
 			return new JpaQueryCreator(tree, returnedType, builder, provider);
-		}
-
-		/**
-		 * Invokes parameter binding on the given {@link TypedQuery}.
-		 */
-		protected Query invokeBinding(ParameterBinder binder, TypedQuery<?> query, JpaParametersParameterAccessor accessor,
-				QueryParameterSetter.QueryMetadataCache metadataCache) {
-
-			QueryParameterSetter.QueryMetadata metadata = metadataCache.getMetadata("query", query);
-
-			return binder.bindAndPrepare(query, metadata, accessor);
-		}
-
-		private ParameterBinder getBinder(List<ParameterMetadata<?>> expressions) {
-			return ParameterBinderFactory.createCriteriaBinder(parameters, expressions);
-		}
-
-		private Sort getDynamicSort(JpaParametersParameterAccessor accessor) {
-
-			return parameters.potentiallySortsDynamically() //
-					? accessor.getSort() //
-					: Sort.unsorted();
 		}
 	}
 
@@ -355,9 +478,9 @@ public class PartTreeJpaQuery extends AbstractJpaQuery {
 	 * @author Oliver Gierke
 	 * @author Thomas Darimont
 	 */
-	private class CountQueryPreparer extends QueryPreparer {
+	private class CriteriaBuilderCountQueryPreparer extends CriteriaBuilderQueryPreparer {
 
-		CountQueryPreparer(boolean recreateQueries) {
+		CriteriaBuilderCountQueryPreparer(boolean recreateQueries) {
 			super(recreateQueries);
 		}
 
