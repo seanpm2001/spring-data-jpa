@@ -465,6 +465,30 @@ class UserRepositoryTests {
 	}
 
 	@Test
+	void executesSpecificationWithNamedParametersCorrectly() {
+
+		flushTestUsers();
+
+		List<User> result = repository.findBy(
+				where((root, query, cb) -> cb.equal(root.get("firstname"), cb.parameter(String.class, "firstname"))),
+				q -> q.params(Map.of("firstname", "Oliver")).all());
+
+		assertThat(result).hasSize(1);
+	}
+
+	@Test
+	void executesSpecificationWithIndexedParametersCorrectly() {
+
+		flushTestUsers();
+
+		List<User> result = repository.findBy(
+				where((root, query, cb) -> cb.equal(root.get("firstname"), cb.parameter(String.class))),
+				q -> q.params("Oliver").all());
+
+		assertThat(result).hasSize(1);
+	}
+
+	@Test
 	void executesSingleEntitySpecificationCorrectly() {
 
 		flushTestUsers();

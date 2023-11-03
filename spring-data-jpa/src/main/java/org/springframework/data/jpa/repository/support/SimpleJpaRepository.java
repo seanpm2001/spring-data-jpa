@@ -61,6 +61,7 @@ import org.springframework.data.jpa.repository.support.FetchableFluentQueryBySpe
 import org.springframework.data.jpa.repository.support.FluentQuerySupport.ScrollQueryFactory;
 import org.springframework.data.jpa.repository.support.QueryHints.NoHints;
 import org.springframework.data.jpa.support.PageableUtils;
+import org.springframework.data.repository.query.FluentQuery;
 import org.springframework.data.repository.query.FluentQuery.FetchableFluentQuery;
 import org.springframework.data.support.PageableExecutionUtils;
 import org.springframework.data.util.ProxyUtils;
@@ -271,8 +272,7 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 			return;
 		}
 
-		applyAndBind(getQueryString(DELETE_ALL_QUERY_STRING, entityInformation.getEntityName()), entities,
-				entityManager)
+		applyAndBind(getQueryString(DELETE_ALL_QUERY_STRING, entityInformation.getEntityName()), entities, entityManager)
 				.executeUpdate();
 	}
 
@@ -310,7 +310,8 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 		LockModeType type = metadata.getLockModeType();
 		Map<String, Object> hints = getHints();
 
-		return Optional.ofNullable(type == null ? entityManager.find(domainType, id, hints) : entityManager.find(domainType, id, type, hints));
+		return Optional.ofNullable(
+				type == null ? entityManager.find(domainType, id, hints) : entityManager.find(domainType, id, type, hints));
 	}
 
 	@Deprecated
@@ -485,7 +486,7 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 	}
 
 	@Override
-	public <S extends T, R> R findBy(Specification<T> spec, Function<FetchableFluentQuery<S>, R> queryFunction) {
+	public <S extends T, R> R findBy(Specification<T> spec, Function<SpecificationFluentQuery<S>, R> queryFunction) {
 
 		Assert.notNull(spec, "Specification must not be null");
 		Assert.notNull(queryFunction, "Query function must not be null");
@@ -493,8 +494,9 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 		return doFindBy(spec, getDomainClass(), queryFunction);
 	}
 
+	@SuppressWarnings({ "unchecked", "rawtypes" })
 	private <S extends T, R> R doFindBy(Specification<T> spec, Class<T> domainClass,
-			Function<FetchableFluentQuery<S>, R> queryFunction) {
+			Function<? extends FluentQuery<?>, R> queryFunction) {
 
 		Assert.notNull(spec, "Specification must not be null");
 		Assert.notNull(queryFunction, "Query function must not be null");
@@ -525,7 +527,8 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 		FetchableFluentQuery<T> fluentQuery = new FetchableFluentQueryBySpecification<>(spec, domainClass, finder,
 				scrollDelegate, this::count, this::exists, this.entityManager);
 
-		return queryFunction.apply((FetchableFluentQuery<S>) fluentQuery);
+		Function<FluentQuery<T>, R> function = (Function) queryFunction;
+		return function.apply(fluentQuery);
 	}
 
 	@Override
@@ -582,6 +585,7 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 	}
 
 	@Override
+	@SuppressWarnings("unchecked")
 	public <S extends T, R> R findBy(Example<S> example, Function<FetchableFluentQuery<S>, R> queryFunction) {
 
 		Assert.notNull(example, "Sample must not be null");

@@ -16,13 +16,18 @@
 package org.springframework.data.jpa.repository.support;
 
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.Parameter;
 import jakarta.persistence.Query;
 import jakarta.persistence.TypedQuery;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -34,10 +39,13 @@ import org.springframework.data.domain.ScrollPosition;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Window;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor.SpecificationFluentQuery;
 import org.springframework.data.jpa.repository.query.ScrollDelegate;
 import org.springframework.data.jpa.support.PageableUtils;
-import org.springframework.data.repository.query.FluentQuery;
 import org.springframework.data.support.PageableExecutionUtils;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.SqlParameterSource;
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 
 /**
@@ -50,7 +58,7 @@ import org.springframework.util.Assert;
  * @since 3.0
  */
 class FetchableFluentQueryBySpecification<S, R> extends FluentQuerySupport<S, R>
-		implements FluentQuery.FetchableFluentQuery<R> {
+		implements SpecificationFluentQuery<R> {
 
 	private final Specification<S> spec;
 	private final Function<Sort, TypedQuery<S>> finder;
@@ -59,18 +67,25 @@ class FetchableFluentQueryBySpecification<S, R> extends FluentQuerySupport<S, R>
 	private final Function<Specification<S>, Boolean> existsOperation;
 	private final EntityManager entityManager;
 
+	private final List<Object> indexedParams;
+
+	private final MapSqlParameterSource namedParams;
+
+	private final SqlParameterSource namedParamSource;
+
 	public FetchableFluentQueryBySpecification(Specification<S> spec, Class<S> entityType,
 			Function<Sort, TypedQuery<S>> finder, SpecificationScrollDelegate<S> scrollDelegate,
 			Function<Specification<S>, Long> countOperation, Function<Specification<S>, Boolean> existsOperation,
 			EntityManager entityManager) {
 		this(spec, entityType, (Class<R>) entityType, Sort.unsorted(), 0, Collections.emptySet(), finder, scrollDelegate,
-				countOperation, existsOperation, entityManager);
+				countOperation, existsOperation, entityManager, Collections.emptyList(), new MapSqlParameterSource(), null);
 	}
 
 	private FetchableFluentQueryBySpecification(Specification<S> spec, Class<S> entityType, Class<R> resultType,
 			Sort sort, int limit, Collection<String> properties, Function<Sort, TypedQuery<S>> finder,
 			SpecificationScrollDelegate<S> scrollDelegate, Function<Specification<S>, Long> countOperation,
-			Function<Specification<S>, Boolean> existsOperation, EntityManager entityManager) {
+			Function<Specification<S>, Boolean> existsOperation, EntityManager entityManager, List<Object> indexedParams,
+			MapSqlParameterSource namedParams, @Nullable SqlParameterSource namedParamSource) {
 
 		super(resultType, sort, limit, properties, entityType);
 		this.spec = spec;
@@ -79,28 +94,33 @@ class FetchableFluentQueryBySpecification<S, R> extends FluentQuerySupport<S, R>
 		this.countOperation = countOperation;
 		this.existsOperation = existsOperation;
 		this.entityManager = entityManager;
+		this.indexedParams = indexedParams;
+		this.namedParams = namedParams;
+		this.namedParamSource = namedParamSource != null ? namedParamSource : namedParams;
 	}
 
 	@Override
-	public FetchableFluentQuery<R> sortBy(Sort sort) {
+	public SpecificationFluentQuery<R> sortBy(Sort sort) {
 
 		Assert.notNull(sort, "Sort must not be null");
 
 		return new FetchableFluentQueryBySpecification<>(spec, entityType, resultType, this.sort.and(sort), limit,
-				properties, finder, scroll, countOperation, existsOperation, entityManager);
+				properties, finder, scroll, countOperation, existsOperation, entityManager, indexedParams, namedParams,
+				namedParamSource);
 	}
 
 	@Override
-	public FetchableFluentQuery<R> limit(int limit) {
+	public SpecificationFluentQuery<R> limit(int limit) {
 
 		Assert.isTrue(limit >= 0, "Limit must not be negative");
 
 		return new FetchableFluentQueryBySpecification<>(spec, entityType, resultType, this.sort.and(sort), limit,
-				properties, finder, scroll, countOperation, existsOperation, entityManager);
+				properties, finder, scroll, countOperation, existsOperation, entityManager, indexedParams, namedParams,
+				namedParamSource);
 	}
 
 	@Override
-	public <NR> FetchableFluentQuery<NR> as(Class<NR> resultType) {
+	public <NR> SpecificationFluentQuery<NR> as(Class<NR> resultType) {
 
 		Assert.notNull(resultType, "Projection target type must not be null");
 		if (!resultType.isInterface()) {
@@ -108,14 +128,51 @@ class FetchableFluentQueryBySpecification<S, R> extends FluentQuerySupport<S, R>
 		}
 
 		return new FetchableFluentQueryBySpecification<>(spec, entityType, resultType, sort, limit, properties, finder,
-				scroll, countOperation, existsOperation, entityManager);
+				scroll, countOperation, existsOperation, entityManager, indexedParams, namedParams, namedParamSource);
 	}
 
 	@Override
-	public FetchableFluentQuery<R> project(Collection<String> properties) {
+	public SpecificationFluentQuery<R> project(Collection<String> properties) {
 
 		return new FetchableFluentQueryBySpecification<>(spec, entityType, resultType, sort, limit, properties, finder,
-				scroll, countOperation, existsOperation, entityManager);
+				scroll, countOperation, existsOperation, entityManager, indexedParams, namedParams, namedParamSource);
+	}
+
+	@Override
+	public SpecificationFluentQuery<R> params(List<?> values) {
+
+		Assert.notNull(values, "Indexed values must not be null");
+
+		List<Object> indexedParams = new ArrayList<>(this.indexedParams);
+		indexedParams.addAll(values);
+
+		return new FetchableFluentQueryBySpecification<>(spec, entityType, resultType, sort, limit, properties, finder,
+				scroll, countOperation, existsOperation, entityManager, indexedParams, namedParams, namedParamSource);
+	}
+
+	@Override
+	public SpecificationFluentQuery<R> params(Map<String, ?> paramMap) {
+
+		Assert.notNull(paramMap, "Parameter map must not be null");
+
+		Map<String, Object> newParams = new LinkedHashMap<>(namedParams.getValues());
+		newParams.putAll(paramMap);
+
+		MapSqlParameterSource mapSqlParameterSource = new MapSqlParameterSource(newParams);
+		SqlParameterSource namedParamSource = this.namedParamSource == this.namedParams ? mapSqlParameterSource
+				: this.namedParamSource;
+
+		return new FetchableFluentQueryBySpecification<>(spec, entityType, resultType, sort, limit, properties, finder,
+				scroll, countOperation, existsOperation, entityManager, indexedParams, namedParams, namedParamSource);
+	}
+
+	@Override
+	public SpecificationFluentQuery<R> params(SqlParameterSource namedParamSource) {
+
+		Assert.notNull(namedParamSource, "SqlParameterSource must not be null");
+
+		return new FetchableFluentQueryBySpecification<>(spec, entityType, resultType, sort, limit, properties, finder,
+				scroll, countOperation, existsOperation, entityManager, indexedParams, namedParams, namedParamSource);
 	}
 
 	@Override
@@ -178,6 +235,7 @@ class FetchableFluentQueryBySpecification<S, R> extends FluentQuerySupport<S, R>
 		return existsOperation.apply(spec);
 	}
 
+	@SuppressWarnings({ "unchecked", "rawtypes" })
 	private TypedQuery<S> createSortedAndProjectedQuery() {
 
 		TypedQuery<S> query = finder.apply(sort);
@@ -190,7 +248,43 @@ class FetchableFluentQueryBySpecification<S, R> extends FluentQuerySupport<S, R>
 			query.setMaxResults(limit);
 		}
 
+		if (useNamedParams()) {
+
+			String[] parameterNames = namedParamSource.getParameterNames();
+			if (parameterNames != null) {
+				for (String parameterName : parameterNames) {
+					query = query.setParameter(parameterName, namedParamSource.getValue(parameterName));
+				}
+			}
+		} else {
+
+			Set<Parameter<?>> parameters = query.getParameters();
+			Iterator<Parameter<?>> iterator = parameters.iterator();
+			for (int i = 0; i < indexedParams.size(); i++) {
+
+				if (!iterator.hasNext()) {
+					break;
+				}
+
+				query = query.setParameter((Parameter) iterator.next(), indexedParams.get(i));
+			}
+		}
+
 		return query;
+	}
+
+	private boolean useNamedParams() {
+
+		boolean hasNamedParams = (this.namedParams.hasValues() || this.namedParamSource != this.namedParams);
+
+		if (hasNamedParams && !this.indexedParams.isEmpty()) {
+			throw new IllegalStateException("Configure either named or indexed parameters, not both");
+		}
+
+		if (this.namedParams.hasValues() && this.namedParamSource != this.namedParams) {
+			throw new IllegalStateException("Configure either individual named parameters or a SqlParameterSource, not both");
+		}
+		return hasNamedParams;
 	}
 
 	private Page<R> readPage(Pageable pageable) {
