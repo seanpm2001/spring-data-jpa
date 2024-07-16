@@ -1684,4 +1684,16 @@ class HqlQueryRendererTests {
 		String source = "select new com.company.%s.thing.stuff.ClassName(e.id) from Experience e".formatted(reservedWord);
 		assertQuery(source);
 	}
+
+	@Test // GH-3536
+	void xxx() {
+
+		String source = """
+            select distinct cast(e.timestampField as date)
+            from ExampleEntity e
+            order by cast(e.timestampField as date) desc
+            """;
+
+		assertQuery(source);
+	}
 }

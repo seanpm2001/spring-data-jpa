@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.CompositeIterator;
 
 /**
@@ -105,6 +106,8 @@ abstract class QueryRenderer implements QueryTokenStream {
 	 */
 	abstract String render();
 
+	abstract List<QueryToken> renderTokens();
+
 	/**
 	 * @return the rendered query.
 	 */
@@ -144,6 +147,44 @@ abstract class QueryRenderer implements QueryTokenStream {
 		}
 
 		return results.toString();
+	}
+
+	static List<QueryToken> renderTokens(Iterable<QueryToken> tokenStream) {
+
+		if (tokenStream instanceof QueryRendererBuilder qrb) {
+			tokenStream = qrb.current;
+		}
+
+		if (tokenStream instanceof QueryRenderer qr) {
+			return qr.renderTokens();
+		}
+
+		List<QueryToken> results = null;
+		boolean previousExpression = false;
+
+		Iterator<QueryToken> iterator = tokenStream.iterator();
+		while (iterator.hasNext()) {
+			QueryToken token = iterator.next();
+
+			if (results == null) {
+				if (iterator.hasNext()) {
+					results = new ArrayList<>();
+				} else {
+					return List.of(token);
+				}
+			}
+
+			if (previousExpression) {
+				if (!results.isEmpty() && !CollectionUtils.lastElement(results).value().endsWith(" ")) {
+					results.add(QueryTokens.TOKEN_SPACE);
+				}
+			}
+
+			previousExpression = token.isExpression();
+			results.add(token);
+		}
+
+		return results;
 	}
 
 	/**
@@ -237,22 +278,30 @@ abstract class QueryRenderer implements QueryTokenStream {
 		String render() {
 
 			StringBuilder builder = new StringBuilder(64);
-			String lastAppended = null;
+			renderTokens().forEach(builder::append);
+			return builder.toString();
+		}
 
+		List<QueryToken> renderTokens() {
+
+			List<QueryToken> tokens = new ArrayList<>();
+			QueryToken lastAppended = null;
 			boolean lastExpression = false;
+
 			for (QueryRenderer queryRenderer : nested) {
 
-				if (lastAppended != null && (lastExpression || queryRenderer.isExpression()) && !builder.isEmpty()
-						&& !lastAppended.endsWith(" ")) {
-					builder.append(' ');
+				if (lastAppended != null && (lastExpression || queryRenderer.isExpression()) && !tokens.isEmpty()
+					&& !lastAppended.value().endsWith(" ")) {
+					tokens.add((QueryTokens.TOKEN_SPACE));
 				}
 
-				lastAppended = queryRenderer.render();
-				builder.append(lastAppended);
+				List<QueryToken> loadedTokens = queryRenderer.renderTokens();
+				lastAppended = CollectionUtils.lastElement(loadedTokens);
+				tokens.addAll(loadedTokens);
 				lastExpression = queryRenderer.isExpression();
 			}
 
-			return builder.toString();
+			return tokens;
 		}
 
 		/**
@@ -370,6 +419,11 @@ abstract class QueryRenderer implements QueryTokenStream {
 		}
 
 		@Override
+		List<QueryToken> renderTokens() {
+			return QueryRenderer.renderTokens(tokens);
+		}
+
+		@Override
 		public Stream<QueryToken> stream() {
 			return tokens.stream();
 		}
@@ -445,6 +499,11 @@ abstract class QueryRenderer implements QueryTokenStream {
 		@Override
 		String render() {
 			return render(tokens);
+		}
+
+		@Override
+		List<QueryToken> renderTokens() {
+			return renderTokens(tokens);
 		}
 
 		@Override
@@ -714,6 +773,11 @@ abstract class QueryRenderer implements QueryTokenStream {
 		}
 
 		@Override
+		List<QueryToken> renderTokens() {
+			return delegate.renderTokens();
+		}
+
+		@Override
 		public Stream<QueryToken> stream() {
 			return delegate.stream();
 		}
@@ -768,6 +832,11 @@ abstract class QueryRenderer implements QueryTokenStream {
 		}
 
 		@Override
+		List<QueryToken> renderTokens() {
+			return delegate.renderTokens();
+		}
+
+		@Override
 		public Stream<QueryToken> stream() {
 			return delegate.stream();
 		}
@@ -816,6 +885,11 @@ abstract class QueryRenderer implements QueryTokenStream {
 		@Override
 		String render() {
 			return "";
+		}
+
+		@Override
+		List<QueryToken> renderTokens() {
+			return List.of();
 		}
 
 		@Override

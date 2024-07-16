@@ -21,6 +21,8 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+import org.springframework.util.CollectionUtils;
+
 /**
  * Utility class encapsulating common query transformations.
  *
@@ -33,16 +35,36 @@ class QueryTransformers {
 
 		List<QueryToken> target = new ArrayList<>(selection.size());
 		boolean skipNext = false;
+		boolean skipNextWitespace = false;
 		boolean containsNew = false;
 
-		for (QueryToken token : selection) {
+		int openParentesis = 0;
+
+		for (QueryToken token : (selection instanceof QueryRenderer qr) ? qr.renderTokens() : selection) {
 
 			if (skipNext) {
-				skipNext = false;
+
+				if(!token.equals(TOKEN_SPACE)) {
+					skipNext = false;
+					skipNextWitespace = true;
+				}
 				continue;
 			}
 
-			if (token.equals(TOKEN_AS)) {
+			if(skipNextWitespace) {
+				skipNextWitespace=false;
+				if(token.equals(TOKEN_SPACE)) {
+					continue;
+				}
+			}
+
+			if(token.equals(TOKEN_OPEN_PAREN)) {
+				openParentesis++;
+			} else if (token.equals(TOKEN_CLOSE_PAREN)) {
+				openParentesis--;
+			}
+
+			if (openParentesis == 0 && token.equals(TOKEN_AS)) {
 				skipNext = true;
 				continue;
 			}
@@ -58,6 +80,9 @@ class QueryTransformers {
 			target.add(token);
 		}
 
+		if(!target.isEmpty() && CollectionUtils.lastElement(target).equals(TOKEN_SPACE)) {
+			target.remove(target.size()-1);
+		}
 		return new CountSelectionTokenStream(target, containsNew);
 	}
 

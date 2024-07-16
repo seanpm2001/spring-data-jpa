@@ -144,6 +144,18 @@ class HqlQueryTransformerTests {
 				"select count(distinct u) from User u where u.foo = ?1");
 	}
 
+	@Test // GH-3536
+	void xxx() {
+
+		String source = """
+            select distinct cast(e.timestamp as date)
+            from ExampleEntity e
+            order by cast(e.timestamp as date) desc
+            """;
+
+		assertCountQuery(source, "select count(distinct cast(e.timestamp as date)) from ExampleEntity e");
+	}
+
 	@Test
 	void createsCountQueryForConstructorQueries() {
 
