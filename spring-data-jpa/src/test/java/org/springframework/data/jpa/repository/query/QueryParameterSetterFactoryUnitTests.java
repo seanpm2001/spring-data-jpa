@@ -74,7 +74,7 @@ class QueryParameterSetterFactoryUnitTests {
 
 		// no parameter present in the criteria query
 		List<ParameterMetadataProvider.ParameterMetadata<?>> metadata = Collections.emptyList();
-		QueryParameterSetterFactory setterFactory = QueryParameterSetterFactory.forCriteriaQuery(parameters, metadata);
+		QueryParameterSetterFactory setterFactory = QueryParameterSetterFactory.forPartTreeQuery(parameters, metadata);
 
 		// one argument present in the method signature
 		when(binding.getRequiredPosition()).thenReturn(1);

@@ -15,6 +15,7 @@
  */
 package org.springframework.data.jpa.repository.query;
 
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Predicate;
@@ -27,6 +28,7 @@ import java.util.Set;
 import org.springframework.data.domain.KeysetScrollPosition;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.support.JpaEntityInformation;
+import org.springframework.data.jpa.repository.support.JpqlQueryTemplates;
 import org.springframework.data.repository.query.ReturnedType;
 import org.springframework.data.repository.query.parser.PartTree;
 import org.springframework.lang.Nullable;
@@ -42,21 +44,21 @@ class JpaKeysetScrollQueryCreator extends JpaQueryCreator {
 	private final JpaEntityInformation<?, ?> entityInformation;
 	private final KeysetScrollPosition scrollPosition;
 
-	public JpaKeysetScrollQueryCreator(PartTree tree, ReturnedType type, CriteriaBuilder builder,
-			ParameterMetadataProvider provider, JpaEntityInformation<?, ?> entityInformation,
-			KeysetScrollPosition scrollPosition) {
+	public JpaKeysetScrollQueryCreator(PartTree tree, ReturnedType type, ParameterMetadataProvider provider,
+			JpqlQueryTemplates templates, JpaEntityInformation<?, ?> entityInformation, KeysetScrollPosition scrollPosition,
+			EntityManager em) {
 
-		super(tree, type, builder, provider);
+		super(tree, type, provider, templates, em);
 
 		this.entityInformation = entityInformation;
 		this.scrollPosition = scrollPosition;
 	}
 
-	@Override
+	// TODO
 	protected CriteriaQuery<?> complete(@Nullable Predicate predicate, Sort sort, CriteriaQuery<?> query,
 			CriteriaBuilder builder, Root<?> root) {
 
-		KeysetScrollSpecification<Object> keysetSpec = new KeysetScrollSpecification<>(scrollPosition, sort,
+		/*KeysetScrollSpecification<Object> keysetSpec = new KeysetScrollSpecification<>(scrollPosition, sort,
 				entityInformation);
 		Predicate keysetPredicate = keysetSpec.createPredicate(root, builder);
 
@@ -69,7 +71,10 @@ class JpaKeysetScrollQueryCreator extends JpaQueryCreator {
 			return queryToUse.where(keysetPredicate);
 		}
 
-		return queryToUse;
+		return queryToUse;*/
+
+		// TODO
+		return null;
 	}
 
 	@Override

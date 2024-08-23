@@ -20,13 +20,14 @@ import static org.assertj.core.api.Assertions.*;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.criteria.CriteriaBuilder;
-import jakarta.persistence.criteria.ParameterExpression;
 
 import java.lang.reflect.Method;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+
 import org.springframework.data.jpa.domain.sample.User;
+import org.springframework.data.jpa.repository.support.JpqlQueryTemplates;
 import org.springframework.data.repository.query.DefaultParameters;
 import org.springframework.data.repository.query.Parameters;
 import org.springframework.data.repository.query.ParametersParameterAccessor;
@@ -57,10 +58,11 @@ class ParameterExpressionProviderTests {
 		Part part = new Part("IdGreaterThan", User.class);
 
 		CriteriaBuilder builder = em.getCriteriaBuilder();
-		ParameterMetadataProvider provider = new ParameterMetadataProvider(builder, accessor, EscapeCharacter.DEFAULT);
-		ParameterExpression<? extends Comparable> expression = provider.next(part, Comparable.class).getExpression();
+		ParameterMetadataProvider provider = new ParameterMetadataProvider(builder, accessor, EscapeCharacter.DEFAULT,
+				JpqlQueryTemplates.UPPER);
+		ParameterMetadataProvider.ParameterMetadata<? extends Comparable> parameter = provider.next(part, Comparable.class);
 
-		assertThat(expression.getParameterType()).isEqualTo(Integer.class);
+		assertThat(parameter.getParameterType()).isEqualTo(Integer.TYPE);
 	}
 
 	interface SampleRepository {

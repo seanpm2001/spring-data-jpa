@@ -30,6 +30,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+
+import org.springframework.data.jpa.repository.support.JpqlQueryTemplates;
 import org.springframework.data.repository.query.Parameters;
 import org.springframework.data.repository.query.parser.Part;
 
@@ -57,7 +59,7 @@ class ParameterMetadataProviderUnitTests {
 		when(parameters.getBindableParameters().iterator()).thenReturn(Collections.emptyListIterator());
 
 		ParameterMetadataProvider metadataProvider = new ParameterMetadataProvider(builder, parameters,
-				EscapeCharacter.DEFAULT);
+				EscapeCharacter.DEFAULT, JpqlQueryTemplates.UPPER);
 
 		assertThatExceptionOfType(RuntimeException.class) //
 				.isThrownBy(() -> metadataProvider.next(mock(Part.class))) //
@@ -68,6 +70,7 @@ class ParameterMetadataProviderUnitTests {
 	void returnAugmentedValueForStringExpressions() {
 
 		when(part.getProperty().getLeafProperty().isCollection()).thenReturn(false);
+		when(part.getProperty().getType()).thenReturn((Class) String.class);
 
 		assertThat(createParameterMetadata(Part.Type.STARTING_WITH).prepare("starting with")).isEqualTo("starting with%");
 		assertThat(createParameterMetadata(Part.Type.ENDING_WITH).prepare("ending with")).isEqualTo("%ending with");
@@ -82,6 +85,6 @@ class ParameterMetadataProviderUnitTests {
 	private ParameterMetadataProvider.ParameterMetadata createParameterMetadata(Part.Type partType) {
 
 		when(part.getType()).thenReturn(partType);
-		return new ParameterMetadataProvider.ParameterMetadata<>(parameterExpression, part, null, EscapeCharacter.DEFAULT);
+		return new ParameterMetadataProvider.ParameterMetadata<>(part.getProperty().getType(), part, null, EscapeCharacter.DEFAULT, 1, JpqlQueryTemplates.LOWER);
 	}
 }

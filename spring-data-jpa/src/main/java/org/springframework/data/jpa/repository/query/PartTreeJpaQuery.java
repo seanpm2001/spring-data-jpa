@@ -23,9 +23,7 @@ import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 
 import java.util.List;
-import java.util.concurrent.locks.ReentrantLock;
 
-import org.springframework.data.domain.KeysetScrollPosition;
 import org.springframework.data.domain.OffsetScrollPosition;
 import org.springframework.data.domain.ScrollPosition;
 import org.springframework.data.domain.Sort;
@@ -33,8 +31,8 @@ import org.springframework.data.jpa.repository.query.JpaParameters.JpaParameter;
 import org.springframework.data.jpa.repository.query.JpaQueryExecution.DeleteExecution;
 import org.springframework.data.jpa.repository.query.JpaQueryExecution.ExistsExecution;
 import org.springframework.data.jpa.repository.query.JpaQueryExecution.ScrollExecution;
-import org.springframework.data.jpa.repository.query.ParameterMetadataProvider.ParameterMetadata;
 import org.springframework.data.jpa.repository.support.JpaMetamodelEntityInformation;
+import org.springframework.data.jpa.repository.support.JpqlQueryTemplates;
 import org.springframework.data.repository.query.ResultProcessor;
 import org.springframework.data.repository.query.ReturnedType;
 import org.springframework.data.repository.query.parser.Part;
@@ -54,6 +52,8 @@ import org.springframework.lang.Nullable;
  * @author Сергей Цыпанов
  */
 public class PartTreeJpaQuery extends AbstractJpaQuery {
+
+	private final JpqlQueryTemplates templates = JpqlQueryTemplates.UPPER;
 
 	private final PartTree tree;
 	private final JpaParameters parameters;
@@ -208,50 +208,36 @@ public class PartTreeJpaQuery extends AbstractJpaQuery {
 	 */
 	private class QueryPreparer {
 
-		private final @Nullable CriteriaQuery<?> cachedCriteriaQuery;
-		private final ReentrantLock lock = new ReentrantLock();
-		private final @Nullable ParameterBinder cachedParameterBinder;
 		private final QueryParameterSetter.QueryMetadataCache metadataCache = new QueryParameterSetter.QueryMetadataCache();
 
-		QueryPreparer(boolean recreateQueries) {
+		// TODO: Cache AbstractQuery
 
-			JpaQueryCreator creator = createCreator(null);
-
-			if (recreateQueries) {
-				this.cachedCriteriaQuery = null;
-				this.cachedParameterBinder = null;
-			} else {
-				this.cachedCriteriaQuery = creator.createQuery();
-				this.cachedParameterBinder = getBinder(creator.getParameterExpressions());
-			}
-		}
+		QueryPreparer(boolean recreateQueries) {}
 
 		/**
 		 * Creates a new {@link Query} for the given parameter values.
 		 */
 		public Query createQuery(JpaParametersParameterAccessor accessor) {
 
-			CriteriaQuery<?> criteriaQuery = cachedCriteriaQuery;
-			ParameterBinder parameterBinder = cachedParameterBinder;
+			JpaQueryCreator creator = createCreator(accessor);
 
-			if (cachedCriteriaQuery == null || accessor.hasBindableNullValue()) {
-				JpaQueryCreator creator = createCreator(accessor);
-				criteriaQuery = creator.createQuery(getDynamicSort(accessor));
-				List<ParameterMetadata<?>> expressions = creator.getParameterExpressions();
-				parameterBinder = getBinder(expressions);
+			String jpql = creator.createQuery(getDynamicSort(accessor));
+			Query query;
+
+			try {
+				query = em.createQuery(jpql);
+			} catch (Exception e) {
+				throw new BadJpqlGrammarException(e.getMessage(), jpql, e);
 			}
 
-			if (parameterBinder == null) {
-				throw new IllegalStateException("ParameterBinder is null");
-			}
-
-			TypedQuery<?> query = createQuery(criteriaQuery);
+			List<ParameterMetadataProvider.ParameterMetadata<?>> expressions = creator.getParameterExpressions();
+			ParameterBinder binder = ParameterBinderFactory.createCriteriaBinder(parameters, expressions);
+			;
 
 			ScrollPosition scrollPosition = accessor.getParameters().hasScrollPositionParameter()
 					? accessor.getScrollPosition()
 					: null;
-			return restrictMaxResultsIfNecessary(invokeBinding(parameterBinder, query, accessor, this.metadataCache),
-					scrollPosition);
+			return restrictMaxResultsIfNecessary(invokeBinding(binder, query, accessor, this.metadataCache), scrollPosition);
 		}
 
 		/**
@@ -289,27 +275,6 @@ public class PartTreeJpaQuery extends AbstractJpaQuery {
 			return query;
 		}
 
-		/**
-		 * Checks whether we are working with a cached {@link CriteriaQuery} and synchronizes the creation of a
-		 * {@link TypedQuery} instance from it. This is due to non-thread-safety in the {@link CriteriaQuery} implementation
-		 * of some persistence providers (i.e. Hibernate in this case), see DATAJPA-396.
-		 *
-		 * @param criteriaQuery must not be {@literal null}.
-		 */
-		private TypedQuery<?> createQuery(CriteriaQuery<?> criteriaQuery) {
-
-			if (this.cachedCriteriaQuery != null) {
-				lock.lock();
-				try {
-					return getEntityManager().createQuery(criteriaQuery);
-				} finally {
-					lock.unlock();
-				}
-			}
-
-			return getEntityManager().createQuery(criteriaQuery);
-		}
-
 		protected JpaQueryCreator createCreator(@Nullable JpaParametersParameterAccessor accessor) {
 
 			EntityManager entityManager = getEntityManager();
@@ -321,33 +286,30 @@ public class PartTreeJpaQuery extends AbstractJpaQuery {
 			ReturnedType returnedType;
 
 			if (accessor != null) {
-				provider = new ParameterMetadataProvider(builder, accessor, escape);
+				provider = new ParameterMetadataProvider(builder, accessor, escape, templates);
 				returnedType = processor.withDynamicProjection(accessor).getReturnedType();
 			} else {
-				provider = new ParameterMetadataProvider(builder, parameters, escape);
+				provider = new ParameterMetadataProvider(builder, parameters, escape, templates);
 				returnedType = processor.getReturnedType();
 			}
 
-			if (accessor != null && accessor.getScrollPosition() instanceof KeysetScrollPosition keyset) {
+			// TODO
+			/*if (accessor != null && accessor.getScrollPosition() instanceof KeysetScrollPosition keyset) {
 				return new JpaKeysetScrollQueryCreator(tree, returnedType, builder, provider, entityInformation, keyset);
-			}
+			} */
 
-			return new JpaQueryCreator(tree, returnedType, builder, provider);
+			return new JpaQueryCreator(tree, returnedType, provider, templates, em);
 		}
 
 		/**
 		 * Invokes parameter binding on the given {@link TypedQuery}.
 		 */
-		protected Query invokeBinding(ParameterBinder binder, TypedQuery<?> query, JpaParametersParameterAccessor accessor,
+		protected Query invokeBinding(ParameterBinder binder, Query query, JpaParametersParameterAccessor accessor,
 				QueryParameterSetter.QueryMetadataCache metadataCache) {
 
 			QueryParameterSetter.QueryMetadata metadata = metadataCache.getMetadata("query", query);
 
 			return binder.bindAndPrepare(query, metadata, accessor);
-		}
-
-		private ParameterBinder getBinder(List<ParameterMetadata<?>> expressions) {
-			return ParameterBinderFactory.createCriteriaBinder(parameters, expressions);
 		}
 
 		private Sort getDynamicSort(JpaParametersParameterAccessor accessor) {
@@ -379,19 +341,20 @@ public class PartTreeJpaQuery extends AbstractJpaQuery {
 			ParameterMetadataProvider provider;
 
 			if (accessor != null) {
-				provider = new ParameterMetadataProvider(builder, accessor, escape);
+				provider = new ParameterMetadataProvider(builder, accessor, escape, templates);
 			} else {
-				provider = new ParameterMetadataProvider(builder, parameters, escape);
+				provider = new ParameterMetadataProvider(builder, parameters, escape, templates);
 			}
 
-			return new JpaCountQueryCreator(tree, getQueryMethod().getResultProcessor().getReturnedType(), builder, provider);
+			return new JpaCountQueryCreator(tree, getQueryMethod().getResultProcessor().getReturnedType(), provider,
+					templates, em);
 		}
 
 		/**
 		 * Customizes binding by skipping the pagination.
 		 */
 		@Override
-		protected Query invokeBinding(ParameterBinder binder, TypedQuery<?> query, JpaParametersParameterAccessor accessor,
+		protected Query invokeBinding(ParameterBinder binder, Query query, JpaParametersParameterAccessor accessor,
 				QueryParameterSetter.QueryMetadataCache metadataCache) {
 
 			QueryParameterSetter.QueryMetadata metadata = metadataCache.getMetadata("countquery", query);

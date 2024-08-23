@@ -15,28 +15,31 @@
  */
 package org.springframework.data.jpa.repository.query;
 
-import static org.springframework.data.jpa.repository.query.QueryUtils.*;
 import static org.springframework.data.repository.query.parser.Part.Type.*;
 
-import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Expression;
-import jakarta.persistence.criteria.ParameterExpression;
-import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.From;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
-import jakarta.persistence.criteria.Root;
-import jakarta.persistence.criteria.Selection;
+import jakarta.persistence.metamodel.Attribute;
+import jakarta.persistence.metamodel.EntityType;
 import jakarta.persistence.metamodel.SingularAttribute;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Objects;
 
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.JpaSort;
+import org.springframework.data.jpa.repository.query.JpqlQueryBuilder.PathAndOrigin;
 import org.springframework.data.jpa.repository.query.ParameterMetadataProvider.ParameterMetadata;
+import org.springframework.data.jpa.repository.support.JpqlQueryTemplates;
 import org.springframework.data.mapping.PropertyPath;
+import org.springframework.data.mapping.PropertyReferenceException;
 import org.springframework.data.repository.query.ReturnedType;
 import org.springframework.data.repository.query.parser.AbstractQueryCreator;
 import org.springframework.data.repository.query.parser.Part;
@@ -57,54 +60,38 @@ import org.springframework.util.Assert;
  * @author Andrey Kovalev
  * @author Greg Turnquist
  */
-public class JpaQueryCreator extends AbstractQueryCreator<CriteriaQuery<? extends Object>, Predicate> {
+public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuilder.Predicate> {
 
-	private final CriteriaBuilder builder;
-	private final Root<?> root;
-	private final CriteriaQuery<? extends Object> query;
-	private final ParameterMetadataProvider provider;
 	private final ReturnedType returnedType;
+	private final ParameterMetadataProvider provider;
+	private final JpqlQueryTemplates templates;
 	private final PartTree tree;
 	private final EscapeCharacter escape;
+	private final EntityType<?> entityType;
+	private final From<?, ?> from;
+	private final JpqlQueryBuilder.Entity entity;
 
 	/**
 	 * Create a new {@link JpaQueryCreator}.
 	 *
 	 * @param tree must not be {@literal null}.
 	 * @param type must not be {@literal null}.
-	 * @param builder must not be {@literal null}.
+	 * @param templates must not be {@literal null}.
 	 * @param provider must not be {@literal null}.
+	 * @param em must not be {@literal null}.
 	 */
-	public JpaQueryCreator(PartTree tree, ReturnedType type, CriteriaBuilder builder,
-			ParameterMetadataProvider provider) {
+	public JpaQueryCreator(PartTree tree, ReturnedType type, ParameterMetadataProvider provider,
+			JpqlQueryTemplates templates, EntityManager em) {
 
 		super(tree);
 		this.tree = tree;
-
-		CriteriaQuery<?> criteriaQuery = createCriteriaQuery(builder, type);
-
-		this.builder = builder;
-		this.query = criteriaQuery.distinct(tree.isDistinct() && !tree.isCountProjection());
-		this.root = query.from(type.getDomainType());
-		this.provider = provider;
 		this.returnedType = type;
+		this.provider = provider;
+		this.templates = templates;
 		this.escape = provider.getEscape();
-	}
-
-	/**
-	 * Creates the {@link CriteriaQuery} to apply predicates on.
-	 *
-	 * @param builder will never be {@literal null}.
-	 * @param type will never be {@literal null}.
-	 * @return must not be {@literal null}.
-	 */
-	protected CriteriaQuery<? extends Object> createCriteriaQuery(CriteriaBuilder builder, ReturnedType type) {
-
-		Class<?> typeToRead = tree.isDelete() ? type.getDomainType() : type.getTypeToRead();
-
-		return (typeToRead == null) || tree.isExistsProjection() //
-				? builder.createTupleQuery() //
-				: builder.createQuery(typeToRead);
+		this.entityType = em.getMetamodel().entity(type.getDomainType());
+		this.from = em.getCriteriaBuilder().createQuery().from(type.getDomainType());
+		this.entity = JpqlQueryBuilder.entity(returnedType.getDomainType());
 	}
 
 	/**
@@ -117,82 +104,123 @@ public class JpaQueryCreator extends AbstractQueryCreator<CriteriaQuery<? extend
 	}
 
 	@Override
-	protected Predicate create(Part part, Iterator<Object> iterator) {
-		return toPredicate(part, root);
+	protected JpqlQueryBuilder.Predicate create(Part part, Iterator<Object> iterator) {
+		return toPredicate(part);
 	}
 
 	@Override
-	protected Predicate and(Part part, Predicate base, Iterator<Object> iterator) {
-		return builder.and(base, toPredicate(part, root));
+	protected JpqlQueryBuilder.Predicate and(Part part, JpqlQueryBuilder.Predicate base, Iterator<Object> iterator) {
+		return base.and(toPredicate(part));
 	}
 
 	@Override
-	protected Predicate or(Predicate base, Predicate predicate) {
-		return builder.or(base, predicate);
+	protected JpqlQueryBuilder.Predicate or(JpqlQueryBuilder.Predicate base, JpqlQueryBuilder.Predicate predicate) {
+		return base.or(predicate);
 	}
 
 	/**
-	 * Finalizes the given {@link Predicate} and applies the given sort. Delegates to
-	 * {@link #complete(Predicate, Sort, CriteriaQuery, CriteriaBuilder, Root)} and hands it the current
-	 * {@link CriteriaQuery} and {@link CriteriaBuilder}.
+	 * Finalizes the given {@link Predicate} and applies the given sort. Delegates to {@link #buildQuery(Sort)} and hands
+	 * it the current {@link JpqlQueryBuilder.Predicate}.
 	 */
 	@Override
-	protected final CriteriaQuery<? extends Object> complete(Predicate predicate, Sort sort) {
-		return complete(predicate, sort, query, builder, root);
+	protected final String complete(@Nullable JpqlQueryBuilder.Predicate predicate, Sort sort) {
+
+		JpqlQueryBuilder.AbstractJpqlQuery query = applyPredicate(predicate, buildQuery(sort));
+		return query.render();
+	}
+
+	protected JpqlQueryBuilder.AbstractJpqlQuery applyPredicate(@Nullable JpqlQueryBuilder.Predicate predicate,
+			JpqlQueryBuilder.AbstractJpqlQuery query) {
+
+		if (predicate != null) {
+			return query.where(predicate);
+		}
+
+		return query;
 	}
 
 	/**
-	 * Template method to finalize the given {@link Predicate} using the given {@link CriteriaQuery} and
-	 * {@link CriteriaBuilder}.
+	 * Template method to build a query stub using the given {@link Sort}.
 	 *
-	 * @param predicate
 	 * @param sort
-	 * @param query
-	 * @param builder
 	 * @return
 	 */
-	@SuppressWarnings({ "unchecked", "rawtypes" })
-	protected CriteriaQuery<? extends Object> complete(@Nullable Predicate predicate, Sort sort,
-			CriteriaQuery<? extends Object> query, CriteriaBuilder builder, Root<?> root) {
+	protected JpqlQueryBuilder.AbstractJpqlQuery buildQuery(Sort sort) {
+
+		JpqlQueryBuilder.Select select = doSelect(sort);
+
+		if (tree.isDelete() || tree.isCountProjection()) {
+			return select;
+		}
+
+		for (Sort.Order order : sort) {
+
+			JpqlQueryBuilder.Expression expression;
+			QueryUtils.checkSortExpression(order);
+
+			try {
+				expression = JpqlQueryBuilder.expression(
+						toExpressionRecursively(entity, from, PropertyPath.from(order.getProperty(), entityType.getJavaType())));
+			} catch (PropertyReferenceException e) {
+
+				if (order instanceof JpaSort.JpaOrder jpaOrder && jpaOrder.isUnsafe()) {
+					expression = JpqlQueryBuilder.expression(order.getProperty());
+				} else {
+					throw e;
+				}
+			}
+
+			if (order.isIgnoreCase()) {
+				expression = JpqlQueryBuilder.function(templates.getIgnoreCaseOperator(), expression);
+			}
+
+			select.orderBy(JpqlQueryBuilder.orderBy(expression, order));
+		}
+
+		return select;
+	}
+
+	private JpqlQueryBuilder.Select doSelect(Sort sort) {
+
+		JpqlQueryBuilder.SelectStep selectStep = JpqlQueryBuilder.selectFrom(entity);
+
+		if (tree.isDelete()) {
+			return selectStep.entity();
+		}
+
+		if (tree.isDistinct()) {
+			selectStep = selectStep.distinct();
+		}
 
 		if (returnedType.needsCustomConstruction()) {
 
 			Collection<String> requiredSelection = getRequiredSelection(sort, returnedType);
-			List<Selection<?>> selections = new ArrayList<>();
-
-			for (String property : requiredSelection) {
-
-				PropertyPath path = PropertyPath.from(property, returnedType.getDomainType());
-				selections.add(toExpressionRecursively(root, path, true).alias(property));
+			if (returnedType.getReturnedType().isInterface()) {
+				return selectStep.select(requiredSelection);
+			} else {
+				return selectStep.instantiate(returnedType.getReturnedType(), requiredSelection);
 			}
+		}
 
-			Class<?> typeToRead = returnedType.getReturnedType();
+		if (tree.isExistsProjection()) {
 
-			query = typeToRead.isInterface() //
-					? query.multiselect(selections) //
-					: query.select((Selection) builder.construct(typeToRead, //
-							selections.toArray(new Selection[0])));
+			if (entityType.hasSingleIdAttribute()) {
 
-		} else if (tree.isExistsProjection()) {
-
-			if (root.getModel().hasSingleIdAttribute()) {
-
-				SingularAttribute<?, ?> id = root.getModel().getId(root.getModel().getIdType().getJavaType());
-				query = query.multiselect(root.get((SingularAttribute) id).alias(id.getName()));
+				SingularAttribute<?, ?> id = entityType.getId(entityType.getIdType().getJavaType());
+				return selectStep.select(id.getName());
 
 			} else {
 
-				query = query.multiselect(root.getModel().getIdClassAttributes().stream()//
-						.map(it -> (Selection<?>) root.get((SingularAttribute) it).alias(it.getName()))
-						.collect(Collectors.toList()));
+				return selectStep.select(entityType.getIdClassAttributes().stream()//
+						.map(Attribute::getName).toList());
 			}
-
-		} else {
-			query = query.select((Root) root);
 		}
 
-		CriteriaQuery<? extends Object> select = query.orderBy(QueryUtils.toOrders(sort, root, builder));
-		return predicate == null ? select : select.where(predicate);
+		if (tree.isCountProjection()) {
+			return selectStep.count();
+		} else {
+			return selectStep.entity();
+		}
 	}
 
 	Collection<String> getRequiredSelection(Sort sort, ReturnedType returnedType) {
@@ -203,11 +231,10 @@ public class JpaQueryCreator extends AbstractQueryCreator<CriteriaQuery<? extend
 	 * Creates a {@link Predicate} from the given {@link Part}.
 	 *
 	 * @param part
-	 * @param root
 	 * @return
 	 */
-	private Predicate toPredicate(Part part, Root<?> root) {
-		return new PredicateBuilder(part, root).build();
+	private JpqlQueryBuilder.Predicate toPredicate(Part part) {
+		return new PredicateBuilder(part).build();
 	}
 
 	/**
@@ -216,24 +243,21 @@ public class JpaQueryCreator extends AbstractQueryCreator<CriteriaQuery<? extend
 	 * @author Phil Webb
 	 * @author Oliver Gierke
 	 */
-	@SuppressWarnings({ "unchecked", "rawtypes" })
+	@SuppressWarnings({ "rawtypes" })
 	private class PredicateBuilder {
 
 		private final Part part;
-		private final Root<?> root;
 
 		/**
-		 * Creates a new {@link PredicateBuilder} for the given {@link Part} and {@link Root}.
+		 * Creates a new {@link PredicateBuilder} for the given {@link Part}.
 		 *
 		 * @param part must not be {@literal null}.
-		 * @param root must not be {@literal null}.
 		 */
-		public PredicateBuilder(Part part, Root<?> root) {
+		public PredicateBuilder(Part part) {
 
 			Assert.notNull(part, "Part must not be null");
-			Assert.notNull(root, "Root must not be null");
+
 			this.part = part;
-			this.root = root;
 		}
 
 		/**
@@ -241,78 +265,78 @@ public class JpaQueryCreator extends AbstractQueryCreator<CriteriaQuery<? extend
 		 *
 		 * @return
 		 */
-		public Predicate build() {
+		public JpqlQueryBuilder.Predicate build() {
 
 			PropertyPath property = part.getProperty();
 			Type type = part.getType();
+
+			PathAndOrigin pas = toExpressionRecursively(entity, from, property);
+			JpqlQueryBuilder.WhereStep where = JpqlQueryBuilder.where(pas);
+			JpqlQueryBuilder.WhereStep whereIgnoreCase = JpqlQueryBuilder.where(potentiallyIgnoreCase(pas));
 
 			switch (type) {
 				case BETWEEN:
 					ParameterMetadata<Comparable> first = provider.next(part);
 					ParameterMetadata<Comparable> second = provider.next(part);
-					return builder.between(getComparablePath(root, part), first.getExpression(), second.getExpression());
+					return where.between(render(first), render(second));
 				case AFTER:
 				case GREATER_THAN:
-					return builder.greaterThan(getComparablePath(root, part),
-							provider.next(part, Comparable.class).getExpression());
+					return where.gt(render(provider.next(part)));
 				case GREATER_THAN_EQUAL:
-					return builder.greaterThanOrEqualTo(getComparablePath(root, part),
-							provider.next(part, Comparable.class).getExpression());
+					return where.gte(render(provider.next(part)));
 				case BEFORE:
 				case LESS_THAN:
-					return builder.lessThan(getComparablePath(root, part), provider.next(part, Comparable.class).getExpression());
+					return where.lt(render(provider.next(part)));
 				case LESS_THAN_EQUAL:
-					return builder.lessThanOrEqualTo(getComparablePath(root, part),
-							provider.next(part, Comparable.class).getExpression());
+					return where.lte(render(provider.next(part)));
 				case IS_NULL:
-					return getTypedPath(root, part).isNull();
+					return where.isNull();
 				case IS_NOT_NULL:
-					return getTypedPath(root, part).isNotNull();
+					return where.isNotNull();
 				case NOT_IN:
-					// cast required for eclipselink workaround, see DATAJPA-433
-					return upperIfIgnoreCase(getTypedPath(root, part))
-							.in((Expression<Collection<?>>) provider.next(part, Collection.class).getExpression()).not();
+					return whereIgnoreCase.notIn(render(provider.next(part, Collection.class)));
 				case IN:
-					// cast required for eclipselink workaround, see DATAJPA-433
-					return upperIfIgnoreCase(getTypedPath(root, part))
-							.in((Expression<Collection<?>>) provider.next(part, Collection.class).getExpression());
+					return whereIgnoreCase.in(render(provider.next(part, Collection.class)));
 				case STARTING_WITH:
 				case ENDING_WITH:
 				case CONTAINING:
 				case NOT_CONTAINING:
 
 					if (property.getLeafProperty().isCollection()) {
+						where = JpqlQueryBuilder.where(entity, property);
 
-						Expression<Collection<Object>> propertyExpression = traversePath(root, property);
-						ParameterExpression<Object> parameterExpression = provider.next(part).getExpression();
-
-						// Can't just call .not() in case of negation as EclipseLink chokes on that.
-						return type.equals(NOT_CONTAINING) //
-								? isNotMember(builder, parameterExpression, propertyExpression) //
-								: isMember(builder, parameterExpression, propertyExpression);
+						return type.equals(NOT_CONTAINING) ? where.notMemberOf(render(provider.next(part)))
+								: where.memberOf(render(provider.next(part)));
 					}
 
 				case LIKE:
 				case NOT_LIKE:
-					Expression<String> stringPath = getTypedPath(root, part);
-					Expression<String> propertyExpression = upperIfIgnoreCase(stringPath);
-					Expression<String> parameterExpression = upperIfIgnoreCase(provider.next(part, String.class).getExpression());
-					Predicate like = builder.like(propertyExpression, parameterExpression, escape.getEscapeCharacter());
-					return type.equals(NOT_LIKE) || type.equals(NOT_CONTAINING) ? like.not() : like;
+
+					ParameterMetadata<? extends String> parameter = provider.next(part, String.class);
+					JpqlQueryBuilder.Expression parameterExpression = potentiallyIgnoreCase(part.getProperty(),
+							JpqlQueryBuilder.parameter(render(parameter)));
+					// Predicate like = builder.like(propertyExpression, parameterExpression, escape.getEscapeCharacter());
+					String escapeChar = Character.toString(escape.getEscapeCharacter());
+					return
+
+					type.equals(NOT_LIKE) || type.equals(NOT_CONTAINING)
+							? whereIgnoreCase.notLike(parameterExpression, escapeChar)
+							: whereIgnoreCase.like(parameterExpression, escapeChar);
 				case TRUE:
-					Expression<Boolean> truePath = getTypedPath(root, part);
-					return builder.isTrue(truePath);
+					return where.isTrue();
 				case FALSE:
-					Expression<Boolean> falsePath = getTypedPath(root, part);
-					return builder.isFalse(falsePath);
+					return where.isFalse();
 				case SIMPLE_PROPERTY:
-					ParameterMetadata<Object> expression = provider.next(part);
-					Expression<Object> path = getTypedPath(root, part);
-					return expression.isIsNullParameter() ? path.isNull()
-							: builder.equal(upperIfIgnoreCase(path), upperIfIgnoreCase(expression.getExpression()));
+					ParameterMetadata<Object> metadata = provider.next(part);
+
+					if (metadata.isIsNullParameter()) {
+						return where.isNull();
+					}
+
+					return whereIgnoreCase.eq(potentiallyIgnoreCase(property, JpqlQueryBuilder.expression(render(metadata))));
 				case NEGATING_SIMPLE_PROPERTY:
-					return builder.notEqual(upperIfIgnoreCase(getTypedPath(root, part)),
-							upperIfIgnoreCase(provider.next(part).getExpression()));
+					return whereIgnoreCase
+							.neq(potentiallyIgnoreCase(property, JpqlQueryBuilder.expression(render(provider.next(part)))));
 				case IS_EMPTY:
 				case IS_NOT_EMPTY:
 
@@ -320,77 +344,126 @@ public class JpaQueryCreator extends AbstractQueryCreator<CriteriaQuery<? extend
 						throw new IllegalArgumentException("IsEmpty / IsNotEmpty can only be used on collection properties");
 					}
 
-					Expression<Collection<Object>> collectionPath = traversePath(root, property);
-					return type.equals(IS_NOT_EMPTY) ? builder.isNotEmpty(collectionPath) : builder.isEmpty(collectionPath);
+					where = JpqlQueryBuilder.where(entity, property);
+					return type.equals(IS_NOT_EMPTY) ? where.isNotEmpty() : where.isEmpty();
 
 				default:
 					throw new IllegalArgumentException("Unsupported keyword " + type);
 			}
 		}
 
-		private <T> Predicate isMember(CriteriaBuilder builder, Expression<T> parameter,
-				Expression<Collection<T>> property) {
-			return builder.isMember(parameter, property);
-		}
-
-		private <T> Predicate isNotMember(CriteriaBuilder builder, Expression<T> parameter,
-				Expression<Collection<T>> property) {
-			return builder.isNotMember(parameter, property);
+		private String render(ParameterMetadata<?> metadata) {
+			return "?" + (metadata.getPosition() + 1);
 		}
 
 		/**
 		 * Applies an {@code UPPERCASE} conversion to the given {@link Expression} in case the underlying {@link Part}
 		 * requires ignoring case.
 		 *
-		 * @param expression must not be {@literal null}.
+		 * @param path must not be {@literal null}.
 		 * @return
 		 */
-		private <T> Expression<T> upperIfIgnoreCase(Expression<? extends T> expression) {
+		private <T> JpqlQueryBuilder.Expression potentiallyIgnoreCase(JpqlQueryBuilder.Origin source,
+				PropertyPath path) {
+			return potentiallyIgnoreCase(path, JpqlQueryBuilder.expression(source, path));
+		}
+
+		/**
+		 * Applies an {@code UPPERCASE} conversion to the given {@link Expression} in case the underlying {@link Part}
+		 * requires ignoring case.
+		 *
+		 * @param path must not be {@literal null}.
+		 * @return
+		 */
+		private <T> JpqlQueryBuilder.Expression potentiallyIgnoreCase(PathAndOrigin pas) {
+			return potentiallyIgnoreCase(pas.path(), JpqlQueryBuilder.expression(pas));
+		}
+
+		/**
+		 * Applies an {@code UPPERCASE} conversion to the given {@link Expression} in case the underlying {@link Part}
+		 * requires ignoring case.
+		 *
+		 * @return
+		 */
+		private <T> JpqlQueryBuilder.Expression potentiallyIgnoreCase(PropertyPath path,
+				JpqlQueryBuilder.Expression expressionValue) {
 
 			switch (part.shouldIgnoreCase()) {
 
 				case ALWAYS:
 
-					Assert.state(canUpperCase(expression), "Unable to ignore case of " + expression.getJavaType().getName()
+					Assert.isTrue(canUpperCase(path), "Unable to ignore case of " + path.getType().getName()
 							+ " types, the property '" + part.getProperty().getSegment() + "' must reference a String");
-					return (Expression<T>) builder.upper((Expression<String>) expression);
+					return JpqlQueryBuilder.function(templates.getIgnoreCaseOperator(), expressionValue);
 
 				case WHEN_POSSIBLE:
 
-					if (canUpperCase(expression)) {
-						return (Expression<T>) builder.upper((Expression<String>) expression);
+					if (canUpperCase(path)) {
+						return JpqlQueryBuilder.function(templates.getIgnoreCaseOperator(), expressionValue);
 					}
 
 				case NEVER:
 				default:
 
-					return (Expression<T>) expression;
+					return expressionValue;
 			}
 		}
 
-		private boolean canUpperCase(Expression<?> expression) {
-			return String.class.equals(expression.getJavaType());
-		}
-
-		/**
-		 * Returns a path to a {@link Comparable}.
-		 *
-		 * @param root
-		 * @param part
-		 * @return
-		 */
-		private Expression<? extends Comparable> getComparablePath(Root<?> root, Part part) {
-			return getTypedPath(root, part);
-		}
-
-		private <T> Expression<T> getTypedPath(Root<?> root, Part part) {
-			return toExpressionRecursively(root, part.getProperty());
-		}
-
-		private <T> Expression<T> traversePath(Path<?> root, PropertyPath path) {
-
-			Path<Object> result = root.get(path.getSegment());
-			return (Expression<T>) (path.hasNext() ? traversePath(result, path.next()) : result);
+		private boolean canUpperCase(PropertyPath path) {
+			return String.class.equals(path.getType());
 		}
 	}
+
+	static PathAndOrigin toExpressionRecursively(JpqlQueryBuilder.Origin source, From<?, ?> from,
+			PropertyPath property) {
+		return toExpressionRecursively(source, from, property, false);
+	}
+
+	static PathAndOrigin toExpressionRecursively(JpqlQueryBuilder.Origin source, From<?, ?> from,
+			PropertyPath property, boolean isForSelection) {
+		return toExpressionRecursively(source, from, property, isForSelection, false);
+	}
+
+	/**
+	 * Creates an expression with proper inner and left joins by recursively navigating the path
+	 *
+	 * @param from the {@link From}
+	 * @param property the property path
+	 * @param isForSelection is the property navigated for the selection or ordering part of the query?
+	 * @param hasRequiredOuterJoin has a parent already required an outer join?
+	 * @param <T> the type of the expression
+	 * @return the expression
+	 */
+	@SuppressWarnings("unchecked")
+	static PathAndOrigin toExpressionRecursively(JpqlQueryBuilder.Origin source, From<?, ?> from,
+			PropertyPath property, boolean isForSelection, boolean hasRequiredOuterJoin) {
+
+		String segment = property.getSegment();
+
+		boolean isLeafProperty = !property.hasNext();
+
+		boolean requiresOuterJoin = QueryUtils.requiresOuterJoin(from, property, isForSelection, hasRequiredOuterJoin);
+
+		// if it does not require an outer join and is a leaf, simply get the segment
+		if (!requiresOuterJoin && isLeafProperty) {
+			return new PathAndOrigin(property, source, false);
+		}
+
+		// get or create the join
+		JpqlQueryBuilder.Join joinSource = requiresOuterJoin ? JpqlQueryBuilder.leftJoin(source, segment)
+				: JpqlQueryBuilder.innerJoin(source, segment);
+		JoinType joinType = requiresOuterJoin ? JoinType.LEFT : JoinType.INNER;
+		Join<?, ?> join = QueryUtils.getOrCreateJoin(from, segment, joinType);
+
+		// if it's a leaf, return the join
+		if (isLeafProperty) {
+			return new PathAndOrigin(property, joinSource, true);
+		}
+
+		PropertyPath nextProperty = Objects.requireNonNull(property.next(), "An element of the property path is null");
+
+		// recurse with the next property
+		return toExpressionRecursively(joinSource, join, nextProperty, isForSelection, requiresOuterJoin);
+	}
+
 }

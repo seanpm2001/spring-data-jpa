@@ -67,7 +67,7 @@ class ParameterBinderFactory {
 		Assert.notNull(parameters, "JpaParameters must not be null");
 		Assert.notNull(metadata, "Parameter metadata must not be null");
 
-		QueryParameterSetterFactory setterFactory = QueryParameterSetterFactory.forCriteriaQuery(parameters, metadata);
+		QueryParameterSetterFactory setterFactory = QueryParameterSetterFactory.forPartTreeQuery(parameters, metadata);
 		List<ParameterBinding> bindings = getBindings(parameters);
 
 		return new ParameterBinder(parameters, createSetters(bindings, setterFactory));

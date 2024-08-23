@@ -71,12 +71,12 @@ abstract class QueryParameterSetterFactory {
 	 * @param metadata must not be {@literal null}.
 	 * @return a {@link QueryParameterSetterFactory} for criteria Queries.
 	 */
-	static QueryParameterSetterFactory forCriteriaQuery(JpaParameters parameters, List<ParameterMetadata<?>> metadata) {
+	static QueryParameterSetterFactory forPartTreeQuery(JpaParameters parameters, List<ParameterMetadata<?>> metadata) {
 
 		Assert.notNull(parameters, "JpaParameters must not be null");
 		Assert.notNull(metadata, "ParameterMetadata must not be null");
 
-		return new CriteriaQueryParameterSetterFactory(parameters, metadata);
+		return new PartTreeQueryParameterSetterFactory(parameters, metadata);
 	}
 
 	/**
@@ -258,7 +258,9 @@ abstract class QueryParameterSetterFactory {
 
 		@Nullable
 		private Object getValue(JpaParametersParameterAccessor accessor, Parameter parameter) {
-			return accessor.getValue(parameter);
+			Object value = accessor.getValue(parameter);
+
+			return value;
 		}
 	}
 
@@ -267,7 +269,7 @@ abstract class QueryParameterSetterFactory {
 	 * @author Oliver Gierke
 	 * @see QueryParameterSetterFactory
 	 */
-	private static class CriteriaQueryParameterSetterFactory extends QueryParameterSetterFactory {
+	private static class PartTreeQueryParameterSetterFactory extends QueryParameterSetterFactory {
 
 		private final JpaParameters parameters;
 		private final List<ParameterMetadata<?>> parameterMetadata;
@@ -279,7 +281,7 @@ abstract class QueryParameterSetterFactory {
 		 * @param parameters must not be {@literal null}.
 		 * @param metadata must not be {@literal null}.
 		 */
-		CriteriaQueryParameterSetterFactory(JpaParameters parameters, List<ParameterMetadata<?>> metadata) {
+		PartTreeQueryParameterSetterFactory(JpaParameters parameters, List<ParameterMetadata<?>> metadata) {
 
 			Assert.notNull(parameters, "JpaParameters must not be null");
 			Assert.notNull(metadata, "Expressions must not be null");
@@ -312,7 +314,7 @@ abstract class QueryParameterSetterFactory {
 			TemporalType temporalType = parameter.isTemporalParameter() ? parameter.getRequiredTemporalType() : null;
 
 			return new NamedOrIndexedQueryParameterSetter(values -> getAndPrepare(parameter, metadata, values),
-					metadata.getExpression(), temporalType);
+					ParameterImpl.of(parameter, binding), temporalType);
 		}
 
 		@Nullable
