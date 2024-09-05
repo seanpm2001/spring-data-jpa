@@ -21,8 +21,6 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.From;
-import jakarta.persistence.criteria.Join;
-import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.EntityType;
@@ -31,7 +29,6 @@ import jakarta.persistence.metamodel.SingularAttribute;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Objects;
 
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.JpaSort;
@@ -94,6 +91,14 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 		this.entity = JpqlQueryBuilder.entity(returnedType.getDomainType());
 	}
 
+	From<?, ?> getFrom() {
+		return from;
+	}
+
+	JpqlQueryBuilder.Entity getEntity() {
+		return entity;
+	}
+
 	/**
 	 * Returns all {@link jakarta.persistence.criteria.ParameterExpression} created when creating the query.
 	 *
@@ -125,12 +130,13 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 	@Override
 	protected final String complete(@Nullable JpqlQueryBuilder.Predicate predicate, Sort sort) {
 
-		JpqlQueryBuilder.AbstractJpqlQuery query = applyPredicate(predicate, buildQuery(sort));
+		JpqlQueryBuilder.AbstractJpqlQuery query = createQuery(predicate, sort);
 		return query.render();
 	}
 
-	protected JpqlQueryBuilder.AbstractJpqlQuery applyPredicate(@Nullable JpqlQueryBuilder.Predicate predicate,
-			JpqlQueryBuilder.AbstractJpqlQuery query) {
+	protected JpqlQueryBuilder.AbstractJpqlQuery createQuery(@Nullable JpqlQueryBuilder.Predicate predicate, Sort sort) {
+
+		JpqlQueryBuilder.Select query = buildQuery(sort);
 
 		if (predicate != null) {
 			return query.where(predicate);
@@ -145,7 +151,7 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 	 * @param sort
 	 * @return
 	 */
-	protected JpqlQueryBuilder.AbstractJpqlQuery buildQuery(Sort sort) {
+	protected JpqlQueryBuilder.Select buildQuery(Sort sort) {
 
 		JpqlQueryBuilder.Select select = doSelect(sort);
 
@@ -159,8 +165,8 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 			QueryUtils.checkSortExpression(order);
 
 			try {
-				expression = JpqlQueryBuilder.expression(
-						toExpressionRecursively(entity, from, PropertyPath.from(order.getProperty(), entityType.getJavaType())));
+				expression = JpqlQueryBuilder.expression(JpqlUtils.toExpressionRecursively(entity, from,
+						PropertyPath.from(order.getProperty(), entityType.getJavaType())));
 			} catch (PropertyReferenceException e) {
 
 				if (order instanceof JpaSort.JpaOrder jpaOrder && jpaOrder.isUnsafe()) {
@@ -227,6 +233,10 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 		return returnedType.getInputProperties();
 	}
 
+	String render(ParameterMetadata<?> metadata) {
+		return "?" + (metadata.getPosition() + 1);
+	}
+
 	/**
 	 * Creates a {@link Predicate} from the given {@link Part}.
 	 *
@@ -270,7 +280,7 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 			PropertyPath property = part.getProperty();
 			Type type = part.getType();
 
-			PathAndOrigin pas = toExpressionRecursively(entity, from, property);
+			PathAndOrigin pas = JpqlUtils.toExpressionRecursively(entity, from, property);
 			JpqlQueryBuilder.WhereStep where = JpqlQueryBuilder.where(pas);
 			JpqlQueryBuilder.WhereStep whereIgnoreCase = JpqlQueryBuilder.where(potentiallyIgnoreCase(pas));
 
@@ -352,10 +362,6 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 			}
 		}
 
-		private String render(ParameterMetadata<?> metadata) {
-			return "?" + (metadata.getPosition() + 1);
-		}
-
 		/**
 		 * Applies an {@code UPPERCASE} conversion to the given {@link Expression} in case the underlying {@link Part}
 		 * requires ignoring case.
@@ -363,8 +369,7 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 		 * @param path must not be {@literal null}.
 		 * @return
 		 */
-		private <T> JpqlQueryBuilder.Expression potentiallyIgnoreCase(JpqlQueryBuilder.Origin source,
-				PropertyPath path) {
+		private <T> JpqlQueryBuilder.Expression potentiallyIgnoreCase(JpqlQueryBuilder.Origin source, PropertyPath path) {
 			return potentiallyIgnoreCase(path, JpqlQueryBuilder.expression(source, path));
 		}
 
@@ -412,58 +417,6 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 		private boolean canUpperCase(PropertyPath path) {
 			return String.class.equals(path.getType());
 		}
-	}
-
-	static PathAndOrigin toExpressionRecursively(JpqlQueryBuilder.Origin source, From<?, ?> from,
-			PropertyPath property) {
-		return toExpressionRecursively(source, from, property, false);
-	}
-
-	static PathAndOrigin toExpressionRecursively(JpqlQueryBuilder.Origin source, From<?, ?> from,
-			PropertyPath property, boolean isForSelection) {
-		return toExpressionRecursively(source, from, property, isForSelection, false);
-	}
-
-	/**
-	 * Creates an expression with proper inner and left joins by recursively navigating the path
-	 *
-	 * @param from the {@link From}
-	 * @param property the property path
-	 * @param isForSelection is the property navigated for the selection or ordering part of the query?
-	 * @param hasRequiredOuterJoin has a parent already required an outer join?
-	 * @param <T> the type of the expression
-	 * @return the expression
-	 */
-	@SuppressWarnings("unchecked")
-	static PathAndOrigin toExpressionRecursively(JpqlQueryBuilder.Origin source, From<?, ?> from,
-			PropertyPath property, boolean isForSelection, boolean hasRequiredOuterJoin) {
-
-		String segment = property.getSegment();
-
-		boolean isLeafProperty = !property.hasNext();
-
-		boolean requiresOuterJoin = QueryUtils.requiresOuterJoin(from, property, isForSelection, hasRequiredOuterJoin);
-
-		// if it does not require an outer join and is a leaf, simply get the segment
-		if (!requiresOuterJoin && isLeafProperty) {
-			return new PathAndOrigin(property, source, false);
-		}
-
-		// get or create the join
-		JpqlQueryBuilder.Join joinSource = requiresOuterJoin ? JpqlQueryBuilder.leftJoin(source, segment)
-				: JpqlQueryBuilder.innerJoin(source, segment);
-		JoinType joinType = requiresOuterJoin ? JoinType.LEFT : JoinType.INNER;
-		Join<?, ?> join = QueryUtils.getOrCreateJoin(from, segment, joinType);
-
-		// if it's a leaf, return the join
-		if (isLeafProperty) {
-			return new PathAndOrigin(property, joinSource, true);
-		}
-
-		PropertyPath nextProperty = Objects.requireNonNull(property.next(), "An element of the property path is null");
-
-		// recurse with the next property
-		return toExpressionRecursively(joinSource, join, nextProperty, isForSelection, requiresOuterJoin);
 	}
 
 }

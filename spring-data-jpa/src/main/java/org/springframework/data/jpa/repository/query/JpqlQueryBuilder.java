@@ -349,6 +349,40 @@ public final class JpqlQueryBuilder {
 		};
 	}
 
+	@Nullable
+	public static Predicate and(List<Predicate> intermediate) {
+
+		Predicate predicate = null;
+
+		for (Predicate other : intermediate) {
+
+			if (predicate == null) {
+				predicate = other;
+			} else {
+				predicate = predicate.and(other);
+			}
+		}
+
+		return predicate;
+	}
+
+	@Nullable
+	public static Predicate or(List<Predicate> intermediate) {
+
+		Predicate predicate = null;
+
+		for (Predicate other : intermediate) {
+
+			if (predicate == null) {
+				predicate = other;
+			} else {
+				predicate = predicate.or(other);
+			}
+		}
+
+		return predicate;
+	}
+
 	/**
 	 * Fluent interface to build a {@link Select}.
 	 */

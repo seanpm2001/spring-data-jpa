@@ -175,6 +175,10 @@ interface QueryParameterSetter {
 		 */
 		public QueryMetadata getMetadata(String cacheKey, Query query) {
 
+			if (true) {
+				return new QueryMetadata(query);
+			}
+
 			QueryMetadata queryMetadata = cache.get(cacheKey);
 
 			if (queryMetadata == null) {

@@ -164,7 +164,6 @@ public class ParameterMetadataProvider {
 	private <T> ParameterMetadata<T> next(Part part, Class<T> type, Parameter parameter) {
 
 		Assert.notNull(type, "Type must not be null");
-		int currentPosition = position++;
 
 		/*
 		 * We treat Expression types as Object vales since the real value to be bound as a parameter is determined at query time.
@@ -174,8 +173,25 @@ public class ParameterMetadataProvider {
 
 		Object value = bindableParameterValues == null ? ParameterMetadata.PLACEHOLDER : bindableParameterValues.next();
 
+		int currentPosition = position++;
 		ParameterMetadata<T> metadata = new ParameterMetadata<>(reifiedType, part, value, escape, currentPosition,
 				templates);
+		expressions.add(metadata);
+
+		return metadata;
+	}
+
+	/**
+	 * Create synthetic parameter metadata for a captured value.
+	 *
+	 * @param value
+	 * @return
+	 */
+	public ParameterMetadata<?> synthetic(Object value) {
+
+		int currentPosition = position++;
+		ParameterMetadata<?> metadata = new ParameterMetadata<>(value, Type.SIMPLE_PROPERTY, currentPosition, templates,
+				escape, false, false);
 		expressions.add(metadata);
 
 		return metadata;
@@ -202,6 +218,7 @@ public class ParameterMetadataProvider {
 		private final EscapeCharacter escape;
 		private final boolean ignoreCase;
 		private final boolean noWildcards;
+		private final @Nullable Object value;
 
 		/**
 		 * Creates a new {@link ParameterMetadata}.
@@ -209,6 +226,7 @@ public class ParameterMetadataProvider {
 		public ParameterMetadata(Class<?> parameterType, Part part, @Nullable Object value, EscapeCharacter escape,
 				int position, JpqlQueryTemplates templates) {
 
+			this.value = null;
 			this.parameterType = parameterType;
 			this.position = position;
 			this.templates = templates;
@@ -216,6 +234,18 @@ public class ParameterMetadataProvider {
 			this.ignoreCase = IgnoreCaseType.ALWAYS.equals(part.shouldIgnoreCase());
 			this.noWildcards = part.getProperty().getLeafProperty().isCollection();
 			this.escape = escape;
+		}
+
+		public ParameterMetadata(Object value, Type type, int position, JpqlQueryTemplates templates,
+				EscapeCharacter escape, boolean ignoreCase, boolean noWildcards) {
+			this.value = value;
+			this.parameterType = value.getClass();
+			this.type = type;
+			this.position = position;
+			this.templates = templates;
+			this.escape = escape;
+			this.ignoreCase = ignoreCase;
+			this.noWildcards = noWildcards;
 		}
 
 		public int getPosition() {
@@ -306,6 +336,11 @@ public class ParameterMetadataProvider {
 							? null //
 							: templates.ignoreCase(it)) //
 					.collect(Collectors.toList());
+		}
+
+		@Nullable
+		public Object getValue() {
+			return this.value;
 		}
 	}
 }

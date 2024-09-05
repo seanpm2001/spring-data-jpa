@@ -344,7 +344,7 @@ class ParameterBinding {
 	 * @author Mark Paluch
 	 * @since 3.1.2
 	 */
-	sealed interface BindingIdentifier permits Named,Indexed,NamedAndIndexed {
+	sealed interface BindingIdentifier permits Named, Indexed, NamedAndIndexed {
 
 		/**
 		 * Creates an identifier for the given {@code name}.
@@ -490,7 +490,7 @@ class ParameterBinding {
 	 * @author Mark Paluch
 	 * @since 3.1.2
 	 */
-	sealed interface ParameterOrigin permits Expression,MethodInvocationArgument {
+	sealed interface ParameterOrigin permits Expression, MethodInvocationArgument, Synthetic {
 
 		/**
 		 * Creates a {@link Expression} for the given {@code expression} string.
@@ -500,6 +500,16 @@ class ParameterBinding {
 		 */
 		static Expression ofExpression(String expression) {
 			return new Expression(expression);
+		}
+
+		/**
+		 * Creates a {@link Expression} for the given {@code expression} string.
+		 *
+		 * @param value the captured value.
+		 * @return {@link Expression} for the given {@code expression} string.
+		 */
+		static Synthetic synthetic(@Nullable Object value) {
+			return new Synthetic(value);
 		}
 
 		/**
@@ -563,6 +573,26 @@ class ParameterBinding {
 	 * @since 3.1.2
 	 */
 	public record Expression(String expression) implements ParameterOrigin {
+
+		@Override
+		public boolean isMethodArgument() {
+			return false;
+		}
+
+		@Override
+		public boolean isExpression() {
+			return true;
+		}
+	}
+
+	/**
+	 * Value object capturing the expression of which a binding parameter originates.
+	 *
+	 * @param expression
+	 * @author Mark Paluch
+	 * @since 3.1.2
+	 */
+	public record Synthetic(@Nullable Object value) implements ParameterOrigin {
 
 		@Override
 		public boolean isMethodArgument() {

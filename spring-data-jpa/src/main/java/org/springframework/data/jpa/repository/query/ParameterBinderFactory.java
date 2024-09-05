@@ -70,6 +70,16 @@ class ParameterBinderFactory {
 		QueryParameterSetterFactory setterFactory = QueryParameterSetterFactory.forPartTreeQuery(parameters, metadata);
 		List<ParameterBinding> bindings = getBindings(parameters);
 
+		if (metadata.size() > parameters.getNumberOfParameters()) {
+			for (int i = parameters.getNumberOfParameters() - 1; i < metadata.size(); i++) {
+
+				ParameterMetadata<?> meta = metadata.get(i);
+				ParameterBinding binding = new ParameterBinding(BindingIdentifier.of(meta.getPosition() + 1),
+						ParameterOrigin.synthetic(meta.getValue()));
+				bindings.add(binding);
+			}
+		}
+
 		return new ParameterBinder(parameters, createSetters(bindings, setterFactory));
 	}
 

@@ -24,6 +24,7 @@ import jakarta.persistence.criteria.CriteriaQuery;
 
 import java.util.List;
 
+import org.springframework.data.domain.KeysetScrollPosition;
 import org.springframework.data.domain.OffsetScrollPosition;
 import org.springframework.data.domain.ScrollPosition;
 import org.springframework.data.domain.Sort;
@@ -232,7 +233,6 @@ public class PartTreeJpaQuery extends AbstractJpaQuery {
 
 			List<ParameterMetadataProvider.ParameterMetadata<?>> expressions = creator.getParameterExpressions();
 			ParameterBinder binder = ParameterBinderFactory.createCriteriaBinder(parameters, expressions);
-			;
 
 			ScrollPosition scrollPosition = accessor.getParameters().hasScrollPositionParameter()
 					? accessor.getScrollPosition()
@@ -293,10 +293,10 @@ public class PartTreeJpaQuery extends AbstractJpaQuery {
 				returnedType = processor.getReturnedType();
 			}
 
-			// TODO
-			/*if (accessor != null && accessor.getScrollPosition() instanceof KeysetScrollPosition keyset) {
-				return new JpaKeysetScrollQueryCreator(tree, returnedType, builder, provider, entityInformation, keyset);
-			} */
+			if (accessor != null && accessor.getScrollPosition() instanceof KeysetScrollPosition keyset) {
+				return new JpaKeysetScrollQueryCreator(tree, returnedType, provider, templates, entityInformation, keyset,
+						entityManager);
+			}
 
 			return new JpaQueryCreator(tree, returnedType, provider, templates, em);
 		}

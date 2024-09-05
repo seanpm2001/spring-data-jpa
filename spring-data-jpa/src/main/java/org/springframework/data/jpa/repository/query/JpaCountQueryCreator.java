@@ -54,7 +54,7 @@ public class JpaCountQueryCreator extends JpaQueryCreator {
 	}
 
 	@Override
-	protected JpqlQueryBuilder.AbstractJpqlQuery buildQuery(Sort sort) {
+	protected JpqlQueryBuilder.Select buildQuery(Sort sort) {
 
 		JpqlQueryBuilder.SelectStep selectStep = JpqlQueryBuilder.selectFrom(returnedType.getDomainType());
 		if (this.distinct) {

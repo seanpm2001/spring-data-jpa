@@ -16,10 +16,6 @@
 package org.springframework.data.jpa.repository.query;
 
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.criteria.CriteriaBuilder;
-import jakarta.persistence.criteria.CriteriaQuery;
-import jakarta.persistence.criteria.Predicate;
-import jakarta.persistence.criteria.Root;
 
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -43,6 +39,7 @@ class JpaKeysetScrollQueryCreator extends JpaQueryCreator {
 
 	private final JpaEntityInformation<?, ?> entityInformation;
 	private final KeysetScrollPosition scrollPosition;
+	private final ParameterMetadataProvider provider;
 
 	public JpaKeysetScrollQueryCreator(PartTree tree, ReturnedType type, ParameterMetadataProvider provider,
 			JpqlQueryTemplates templates, JpaEntityInformation<?, ?> entityInformation, KeysetScrollPosition scrollPosition,
@@ -52,29 +49,42 @@ class JpaKeysetScrollQueryCreator extends JpaQueryCreator {
 
 		this.entityInformation = entityInformation;
 		this.scrollPosition = scrollPosition;
+		this.provider = provider;
 	}
 
-	// TODO
-	protected CriteriaQuery<?> complete(@Nullable Predicate predicate, Sort sort, CriteriaQuery<?> query,
-			CriteriaBuilder builder, Root<?> root) {
+	@Override
+	protected JpqlQueryBuilder.AbstractJpqlQuery createQuery(@Nullable JpqlQueryBuilder.Predicate predicate, Sort sort) {
 
-		/*KeysetScrollSpecification<Object> keysetSpec = new KeysetScrollSpecification<>(scrollPosition, sort,
+		KeysetScrollSpecification<Object> keysetSpec = new KeysetScrollSpecification<>(scrollPosition, sort,
 				entityInformation);
-		Predicate keysetPredicate = keysetSpec.createPredicate(root, builder);
+		JpqlQueryBuilder.Predicate keysetPredicate = keysetSpec.createJpqlPredicate(getFrom(), getEntity(), value -> {
+			return JpqlQueryBuilder.expression(render(provider.synthetic(value)));
+		});
 
-		CriteriaQuery<?> queryToUse = super.complete(predicate, keysetSpec.sort(), query, builder, root);
+		JpqlQueryBuilder.Select query = buildQuery(keysetSpec.sort());
 
-		if (keysetPredicate != null) {
-			if (queryToUse.getRestriction() != null) {
-				return queryToUse.where(builder.and(queryToUse.getRestriction(), keysetPredicate));
-			}
-			return queryToUse.where(keysetPredicate);
+		JpqlQueryBuilder.Predicate predicateToUse = getPredicate(predicate, keysetPredicate);
+
+		if (predicateToUse != null) {
+			return query.where(predicateToUse);
 		}
 
-		return queryToUse;*/
+		return query;
+	}
 
-		// TODO
-		return null;
+	@Nullable
+	private static JpqlQueryBuilder.Predicate getPredicate(@Nullable JpqlQueryBuilder.Predicate predicate,
+			@Nullable JpqlQueryBuilder.Predicate keysetPredicate) {
+
+		if (keysetPredicate != null) {
+			if (predicate != null) {
+				return predicate.nest().and(keysetPredicate.nest());
+			} else {
+				return keysetPredicate;
+			}
+		}
+
+		return predicate;
 	}
 
 	@Override
