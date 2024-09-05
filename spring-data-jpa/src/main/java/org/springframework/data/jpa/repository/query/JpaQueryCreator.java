@@ -27,6 +27,7 @@ import jakarta.persistence.metamodel.EntityType;
 import jakarta.persistence.metamodel.SingularAttribute;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
@@ -106,6 +107,10 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 	 */
 	public List<ParameterMetadata<?>> getParameterExpressions() {
 		return provider.getExpressions();
+	}
+
+	List<ParameterBinding> getParameterBindings() {
+		return Collections.emptyList();
 	}
 
 	@Override
@@ -233,8 +238,12 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 		return returnedType.getInputProperties();
 	}
 
-	String render(ParameterMetadata<?> metadata) {
-		return "?" + (metadata.getPosition() + 1);
+	String render(int position) {
+		return "?" + (position + 1);
+	}
+
+	private String render(ParameterMetadata<?> metadata) {
+		return render(metadata.getPosition());
 	}
 
 	/**

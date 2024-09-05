@@ -17,8 +17,10 @@ package org.springframework.data.jpa.repository.query;
 
 import jakarta.persistence.EntityManager;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 import org.springframework.data.domain.KeysetScrollPosition;
@@ -40,6 +42,7 @@ class JpaKeysetScrollQueryCreator extends JpaQueryCreator {
 	private final JpaEntityInformation<?, ?> entityInformation;
 	private final KeysetScrollPosition scrollPosition;
 	private final ParameterMetadataProvider provider;
+	private final List<ParameterBinding> bindings = new ArrayList<>();
 
 	public JpaKeysetScrollQueryCreator(PartTree tree, ReturnedType type, ParameterMetadataProvider provider,
 			JpqlQueryTemplates templates, JpaEntityInformation<?, ?> entityInformation, KeysetScrollPosition scrollPosition,
@@ -53,12 +56,22 @@ class JpaKeysetScrollQueryCreator extends JpaQueryCreator {
 	}
 
 	@Override
+	List<ParameterBinding> getParameterBindings() {
+		return bindings;
+	}
+
+	@Override
 	protected JpqlQueryBuilder.AbstractJpqlQuery createQuery(@Nullable JpqlQueryBuilder.Predicate predicate, Sort sort) {
 
 		KeysetScrollSpecification<Object> keysetSpec = new KeysetScrollSpecification<>(scrollPosition, sort,
 				entityInformation);
 		JpqlQueryBuilder.Predicate keysetPredicate = keysetSpec.createJpqlPredicate(getFrom(), getEntity(), value -> {
-			return JpqlQueryBuilder.expression(render(provider.synthetic(value)));
+
+			int position = provider.nextPosition();
+			bindings.add(new ParameterBinding(ParameterBinding.BindingIdentifier.of(position + 1),
+					ParameterBinding.ParameterOrigin.synthetic(value)));
+
+			return JpqlQueryBuilder.expression(render(position));
 		});
 
 		JpqlQueryBuilder.Select query = buildQuery(keysetSpec.sort());

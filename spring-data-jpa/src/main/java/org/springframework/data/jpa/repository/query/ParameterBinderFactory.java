@@ -58,29 +58,23 @@ class ParameterBinderFactory {
 	 * {@link jakarta.persistence.criteria.CriteriaQuery}.
 	 *
 	 * @param parameters method parameters that are available for binding, must not be {@literal null}.
-	 * @param metadata must not be {@literal null}.
+	 * @param metadata parameter metadata for method argument parameters, must not be {@literal null}.
+	 * @param bindings additional (e.g. synthetic) bindings, must not be {@literal null}.
 	 * @return a {@link ParameterBinder} that can assign values for the method parameters to query parameters of a
 	 *         {@link jakarta.persistence.criteria.CriteriaQuery}
 	 */
-	static ParameterBinder createCriteriaBinder(JpaParameters parameters, List<ParameterMetadata<?>> metadata) {
+	static ParameterBinder createCriteriaBinder(JpaParameters parameters, List<ParameterMetadata<?>> metadata,
+			List<ParameterBinding> bindings) {
 
 		Assert.notNull(parameters, "JpaParameters must not be null");
 		Assert.notNull(metadata, "Parameter metadata must not be null");
 
-		QueryParameterSetterFactory setterFactory = QueryParameterSetterFactory.forPartTreeQuery(parameters, metadata);
-		List<ParameterBinding> bindings = getBindings(parameters);
+		List<ParameterBinding> bindingsToUse = getBindings(parameters);
+		bindingsToUse.addAll(bindings);
 
-		if (metadata.size() > parameters.getNumberOfParameters()) {
-			for (int i = parameters.getNumberOfParameters() - 1; i < metadata.size(); i++) {
-
-				ParameterMetadata<?> meta = metadata.get(i);
-				ParameterBinding binding = new ParameterBinding(BindingIdentifier.of(meta.getPosition() + 1),
-						ParameterOrigin.synthetic(meta.getValue()));
-				bindings.add(binding);
-			}
-		}
-
-		return new ParameterBinder(parameters, createSetters(bindings, setterFactory));
+		return new ParameterBinder(parameters,
+				createSetters(bindingsToUse, QueryParameterSetterFactory.forPartTreeQuery(parameters, metadata),
+						QueryParameterSetterFactory.forSynthetic()));
 	}
 
 	/**
@@ -113,7 +107,7 @@ class ParameterBinderFactory {
 				!query.usesPaging());
 	}
 
-	private static List<ParameterBinding> getBindings(JpaParameters parameters) {
+	static List<ParameterBinding> getBindings(JpaParameters parameters) {
 
 		List<ParameterBinding> result = new ArrayList<>();
 		int bindableParameterIndex = 0;

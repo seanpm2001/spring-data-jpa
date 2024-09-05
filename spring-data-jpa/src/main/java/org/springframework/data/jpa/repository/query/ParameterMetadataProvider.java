@@ -181,20 +181,8 @@ public class ParameterMetadataProvider {
 		return metadata;
 	}
 
-	/**
-	 * Create synthetic parameter metadata for a captured value.
-	 *
-	 * @param value
-	 * @return
-	 */
-	public ParameterMetadata<?> synthetic(Object value) {
-
-		int currentPosition = position++;
-		ParameterMetadata<?> metadata = new ParameterMetadata<>(value, Type.SIMPLE_PROPERTY, currentPosition, templates,
-				escape, false, false);
-		expressions.add(metadata);
-
-		return metadata;
+	public int nextPosition() {
+		return position++;
 	}
 
 	EscapeCharacter getEscape() {

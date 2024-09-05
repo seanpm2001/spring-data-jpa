@@ -232,7 +232,8 @@ public class PartTreeJpaQuery extends AbstractJpaQuery {
 			}
 
 			List<ParameterMetadataProvider.ParameterMetadata<?>> expressions = creator.getParameterExpressions();
-			ParameterBinder binder = ParameterBinderFactory.createCriteriaBinder(parameters, expressions);
+			ParameterBinder binder = ParameterBinderFactory.createCriteriaBinder(parameters, expressions,
+					creator.getParameterBindings());
 
 			ScrollPosition scrollPosition = accessor.getParameters().hasScrollPositionParameter()
 					? accessor.getScrollPosition()

@@ -79,6 +79,10 @@ abstract class QueryParameterSetterFactory {
 		return new PartTreeQueryParameterSetterFactory(parameters, metadata);
 	}
 
+	static QueryParameterSetterFactory forSynthetic() {
+		return new SyntheticParameterSetterFactory();
+	}
+
 	/**
 	 * Creates a new {@link QueryParameterSetterFactory} for the given {@link SpelExpressionParser},
 	 * {@link EvaluationContextProvider} and {@link Parameters}.
@@ -212,6 +216,25 @@ abstract class QueryParameterSetterFactory {
 	}
 
 	/**
+	 * Handles synthetic bindings that have been captured during parameter augmenting.
+	 *
+	 * @author Mark Paluch
+	 * @since 4.0
+	 */
+	private static class SyntheticParameterSetterFactory extends QueryParameterSetterFactory {
+
+		@Override
+		public QueryParameterSetter create(ParameterBinding binding, DeclaredQuery declaredQuery) {
+
+			if (!(binding.getOrigin() instanceof ParameterBinding.Synthetic s)) {
+				return null;
+			}
+
+			return createSetter(values -> s.value(), binding, null);
+		}
+	}
+
+	/**
 	 * Extracts values for parameter bindings from method parameters. It handles named as well as indexed parameters.
 	 *
 	 * @author Jens Schauder
@@ -258,9 +281,7 @@ abstract class QueryParameterSetterFactory {
 
 		@Nullable
 		private Object getValue(JpaParametersParameterAccessor accessor, Parameter parameter) {
-			Object value = accessor.getValue(parameter);
-
-			return value;
+			return accessor.getValue(parameter);
 		}
 	}
 
@@ -293,6 +314,10 @@ abstract class QueryParameterSetterFactory {
 		@Override
 		public QueryParameterSetter create(ParameterBinding binding, DeclaredQuery declaredQuery) {
 
+			if (binding.getOrigin() instanceof ParameterBinding.Synthetic) {
+				return null;
+			}
+
 			int parameterIndex = binding.getRequiredPosition() - 1;
 
 			Assert.isTrue( //
@@ -310,15 +335,9 @@ abstract class QueryParameterSetterFactory {
 				return QueryParameterSetter.NOOP;
 			}
 
-			if (binding.getOrigin() instanceof ParameterBinding.Synthetic syntheticValue) {
-				return createSetter(values -> syntheticValue.value(), binding, null);
-			}
-
 			JpaParameter parameter = parameters.getBindableParameter(parameterIndex);
-			TemporalType temporalType = parameter.isTemporalParameter() ? parameter.getRequiredTemporalType() : null;
-
-			return new NamedOrIndexedQueryParameterSetter(values -> getAndPrepare(parameter, metadata, values),
-					ParameterImpl.of(parameter, binding), temporalType);
+			return QueryParameterSetterFactory.createSetter(values -> getAndPrepare(parameter, metadata, values), binding,
+					parameter);
 		}
 
 		@Nullable
