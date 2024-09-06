@@ -22,10 +22,10 @@ import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.From;
 import jakarta.persistence.criteria.Predicate;
-import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.EntityType;
 import jakarta.persistence.metamodel.SingularAttribute;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
@@ -210,10 +210,18 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 		if (returnedType.needsCustomConstruction()) {
 
 			Collection<String> requiredSelection = getRequiredSelection(sort, returnedType);
+
+			List<PathAndOrigin> paths = new ArrayList<>(requiredSelection.size());
+			for (String selection : requiredSelection) {
+				paths.add(
+						JpqlUtils.toExpressionRecursively(entity, from, PropertyPath.from(selection, from.getJavaType()), true));
+			}
+
 			if (useTupleQuery()) {
-				return selectStep.select(requiredSelection);
+
+				return selectStep.select(paths);
 			} else {
-				return selectStep.instantiate(returnedType.getReturnedType(), requiredSelection);
+				return selectStep.instantiate(returnedType.getReturnedType(), paths);
 			}
 		}
 
@@ -222,12 +230,16 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 			if (entityType.hasSingleIdAttribute()) {
 
 				SingularAttribute<?, ?> id = entityType.getId(entityType.getIdType().getJavaType());
-				return selectStep.select(id.getName());
+				return selectStep.select(
+						JpqlUtils.toExpressionRecursively(entity, from, PropertyPath.from(id.getName(), from.getJavaType()), true));
 
 			} else {
 
-				return selectStep.select(entityType.getIdClassAttributes().stream()//
-						.map(Attribute::getName).toList());
+				List<PathAndOrigin> paths = entityType.getIdClassAttributes().stream()//
+						.map(it -> JpqlUtils.toExpressionRecursively(entity, from,
+								PropertyPath.from(it.getName(), from.getJavaType()), true))
+						.toList();
+				return selectStep.select(paths);
 			}
 		}
 

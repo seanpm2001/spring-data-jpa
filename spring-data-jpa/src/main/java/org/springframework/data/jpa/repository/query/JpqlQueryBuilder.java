@@ -118,12 +118,12 @@ public final class JpqlQueryBuilder {
 			}
 
 			@Override
-			public Select instantiate(String resultType, Collection<String> paths) {
+			public Select instantiate(String resultType, Collection<PathAndOrigin> paths) {
 				return new Select(postProcess(new ConstructorExpression(resultType, new Multiselect(from, paths))), from);
 			}
 
 			@Override
-			public Select select(Collection<String> paths) {
+			public Select select(Collection<PathAndOrigin> paths) {
 				return new Select(postProcess(new Multiselect(from, paths)), from);
 			}
 
@@ -411,36 +411,35 @@ public final class JpqlQueryBuilder {
 		 * @param paths
 		 * @return
 		 */
-		default Select instantiate(Class<?> resultType, Collection<String> paths) {
+		default Select instantiate(Class<?> resultType, Collection<PathAndOrigin> paths) {
 			return instantiate(resultType.getName(), paths);
 		}
 
 		/**
-		 * Provide a constructor expression to instantiate {@code resultType}. Operates on the underlying {@link Entity
-		 * FROM}.
+		 * Provide a constructor expression to instantiate {@code resultType}.
 		 *
 		 * @param resultType
 		 * @param paths
 		 * @return
 		 */
-		Select instantiate(String resultType, Collection<String> paths);
+		Select instantiate(String resultType, Collection<PathAndOrigin> paths);
 
 		/**
-		 * Specify a multi-select. Operates on the underlying {@link Entity FROM}.
+		 * Specify a multi-select.
 		 *
 		 * @param paths
 		 * @return
 		 */
-		Select select(Collection<String> paths);
+		Select select(Collection<PathAndOrigin> paths);
 
 		/**
-		 * Select a single attribute. Operates on the underlying {@link Entity FROM}.
+		 * Select a single attribute.
 		 *
 		 * @param name
 		 * @return
 		 */
-		default Select select(String name) {
-			return select(List.of(name));
+		default Select select(PathAndOrigin path) {
+			return select(List.of(path));
 		}
 
 	}
@@ -529,24 +528,21 @@ public final class JpqlQueryBuilder {
 	 * @param source
 	 * @param paths
 	 */
-	record Multiselect(Origin source, Collection<String> paths) implements Selection {
+	record Multiselect(Origin source, Collection<PathAndOrigin> paths) implements Selection {
 
 		@Override
 		public String render(RenderContext context) {
 
 			StringBuilder builder = new StringBuilder();
 
-			for (String path : paths) {
+			for (PathAndOrigin path : paths) {
 
 				if (!builder.isEmpty()) {
 					builder.append(", ");
 				}
 
-				builder.append(context.prefixWithAlias(source, path));
-
-				if (!path.contains(".")) {
-					builder.append(" ").append(path);
-				}
+				builder.append(PathExpression.render(path, context));
+				builder.append(" ").append(path.path().getSegment());
 			}
 
 			return builder.toString();
@@ -1023,11 +1019,16 @@ public final class JpqlQueryBuilder {
 
 		@Override
 		public String render(RenderContext context) {
+			return render(pas, context);
+
+		}
+
+		public static String render(PathAndOrigin pas, RenderContext context) {
 
 			if (pas.path().hasNext() || !pas.onTheJoin()) {
-				return context.prefixWithAlias(pas().origin(), pas.path().toDotPath());
+				return context.prefixWithAlias(pas.origin(), pas.path().toDotPath());
 			} else {
-				return context.getAlias(pas().origin());
+				return context.getAlias(pas.origin());
 			}
 		}
 
