@@ -563,6 +563,11 @@ class ParameterBinding {
 		 * @return {@code true} if the origin is an expression.
 		 */
 		boolean isExpression();
+
+		/**
+		 * @return {@code true} if the origin is an expression.
+		 */
+		boolean isSynthetic();
 	}
 
 	/**
@@ -583,14 +588,18 @@ class ParameterBinding {
 		public boolean isExpression() {
 			return true;
 		}
+
+		@Override
+		public boolean isSynthetic() {
+			return true;
+		}
 	}
 
 	/**
 	 * Value object capturing the expression of which a binding parameter originates.
 	 *
-	 * @param expression
+	 * @param value
 	 * @author Mark Paluch
-	 * @since 3.1.2
 	 */
 	public record Synthetic(@Nullable Object value) implements ParameterOrigin {
 
@@ -601,6 +610,11 @@ class ParameterBinding {
 
 		@Override
 		public boolean isExpression() {
+			return false;
+		}
+
+		@Override
+		public boolean isSynthetic() {
 			return true;
 		}
 	}
@@ -621,6 +635,11 @@ class ParameterBinding {
 
 		@Override
 		public boolean isExpression() {
+			return false;
+		}
+
+		@Override
+		public boolean isSynthetic() {
 			return false;
 		}
 	}

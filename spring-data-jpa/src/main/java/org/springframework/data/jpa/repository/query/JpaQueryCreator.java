@@ -100,16 +100,20 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 		return entity;
 	}
 
+	public boolean useTupleQuery() {
+		return returnedType.needsCustomConstruction() && returnedType.getReturnedType().isInterface();
+	}
+
 	/**
 	 * Returns all {@link jakarta.persistence.criteria.ParameterExpression} created when creating the query.
 	 *
 	 * @return the parameterExpressions
 	 */
-	public List<ParameterMetadata<?>> getParameterExpressions() {
+	public List<ParameterMetadata> getParameterExpressions() {
 		return provider.getExpressions();
 	}
 
-	List<ParameterBinding> getParameterBindings() {
+	List<ParameterBinding.Synthetic> getSyntheticParameterBindings() {
 		return Collections.emptyList();
 	}
 
@@ -206,7 +210,7 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 		if (returnedType.needsCustomConstruction()) {
 
 			Collection<String> requiredSelection = getRequiredSelection(sort, returnedType);
-			if (returnedType.getReturnedType().isInterface()) {
+			if (useTupleQuery()) {
 				return selectStep.select(requiredSelection);
 			} else {
 				return selectStep.instantiate(returnedType.getReturnedType(), requiredSelection);
@@ -242,7 +246,7 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 		return "?" + (position + 1);
 	}
 
-	private String render(ParameterMetadata<?> metadata) {
+	private String render(ParameterMetadata metadata) {
 		return render(metadata.getPosition());
 	}
 
@@ -295,8 +299,8 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 
 			switch (type) {
 				case BETWEEN:
-					ParameterMetadata<Comparable> first = provider.next(part);
-					ParameterMetadata<Comparable> second = provider.next(part);
+					ParameterMetadata first = provider.next(part);
+					ParameterMetadata second = provider.next(part);
 					return where.between(render(first), render(second));
 				case AFTER:
 				case GREATER_THAN:
@@ -331,7 +335,7 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 				case LIKE:
 				case NOT_LIKE:
 
-					ParameterMetadata<? extends String> parameter = provider.next(part, String.class);
+					ParameterMetadata parameter = provider.next(part, String.class);
 					JpqlQueryBuilder.Expression parameterExpression = potentiallyIgnoreCase(part.getProperty(),
 							JpqlQueryBuilder.parameter(render(parameter)));
 					// Predicate like = builder.like(propertyExpression, parameterExpression, escape.getEscapeCharacter());
@@ -346,7 +350,7 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 				case FALSE:
 					return where.isFalse();
 				case SIMPLE_PROPERTY:
-					ParameterMetadata<Object> metadata = provider.next(part);
+					ParameterMetadata metadata = provider.next(part);
 
 					if (metadata.isIsNullParameter()) {
 						return where.isNull();

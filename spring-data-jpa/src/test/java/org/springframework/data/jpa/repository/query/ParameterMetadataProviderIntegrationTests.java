@@ -72,7 +72,7 @@ class ParameterMetadataProviderIntegrationTests {
 	void doesNotApplyLikeExpansionOnNonStringProperties() throws Exception {
 
 		ParameterMetadataProvider provider = createProvider(Sample.class.getMethod("findByAgeContaining", Integer.class));
-		ParameterMetadata<Object> metadata = provider.next(new Part("ageContaining", User.class));
+		ParameterMetadata metadata = provider.next(new Part("ageContaining", User.class));
 
 		assertThat(metadata.prepare(1)).isEqualTo(1);
 	}

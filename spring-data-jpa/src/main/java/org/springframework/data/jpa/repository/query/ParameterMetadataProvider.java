@@ -56,7 +56,7 @@ import org.springframework.util.ObjectUtils;
 public class ParameterMetadataProvider {
 
 	private final Iterator<? extends Parameter> parameters;
-	private final List<ParameterMetadata<?>> expressions;
+	private final List<ParameterMetadata> expressions;
 	private final @Nullable Iterator<Object> bindableParameterValues;
 	private final EscapeCharacter escape;
 	private final JpqlQueryTemplates templates;
@@ -120,7 +120,7 @@ public class ParameterMetadataProvider {
 	 *
 	 * @return the expressions
 	 */
-	public List<ParameterMetadata<?>> getExpressions() {
+	public List<ParameterMetadata> getExpressions() {
 		return expressions;
 	}
 
@@ -128,12 +128,12 @@ public class ParameterMetadataProvider {
 	 * Builds a new {@link ParameterMetadata} for given {@link Part} and the next {@link Parameter}.
 	 */
 	@SuppressWarnings("unchecked")
-	public <T> ParameterMetadata<T> next(Part part) {
+	public <T> ParameterMetadata next(Part part) {
 
 		Assert.isTrue(parameters.hasNext(), () -> String.format("No parameter available for part %s", part));
 
 		Parameter parameter = parameters.next();
-		return (ParameterMetadata<T>) next(part, parameter.getType(), parameter);
+		return next(part, parameter.getType(), parameter);
 	}
 
 	/**
@@ -145,11 +145,11 @@ public class ParameterMetadataProvider {
 	 * @return ParameterMetadata for the next parameter.
 	 */
 	@SuppressWarnings("unchecked")
-	public <T> ParameterMetadata<? extends T> next(Part part, Class<T> type) {
+	public <T> ParameterMetadata next(Part part, Class<T> type) {
 
 		Parameter parameter = parameters.next();
 		Class<?> typeToUse = ClassUtils.isAssignable(type, parameter.getType()) ? parameter.getType() : type;
-		return (ParameterMetadata<? extends T>) next(part, typeToUse, parameter);
+		return next(part, typeToUse, parameter);
 	}
 
 	/**
@@ -161,7 +161,7 @@ public class ParameterMetadataProvider {
 	 * @param parameter providing the name for the returned {@link ParameterMetadata}.
 	 * @return a new {@link ParameterMetadata} for the given type and name.
 	 */
-	private <T> ParameterMetadata<T> next(Part part, Class<T> type, Parameter parameter) {
+	private <T> ParameterMetadata next(Part part, Class<T> type, Parameter parameter) {
 
 		Assert.notNull(type, "Type must not be null");
 
@@ -174,8 +174,7 @@ public class ParameterMetadataProvider {
 		Object value = bindableParameterValues == null ? ParameterMetadata.PLACEHOLDER : bindableParameterValues.next();
 
 		int currentPosition = position++;
-		ParameterMetadata<T> metadata = new ParameterMetadata<>(reifiedType, part, value, escape, currentPosition,
-				templates);
+		ParameterMetadata metadata = new ParameterMetadata(reifiedType, part, value, escape, currentPosition, templates);
 		expressions.add(metadata);
 
 		return metadata;
@@ -193,9 +192,8 @@ public class ParameterMetadataProvider {
 	 * @author Oliver Gierke
 	 * @author Thomas Darimont
 	 * @author Andrey Kovalev
-	 * @param <T>
 	 */
-	public static class ParameterMetadata<T> {
+	public static class ParameterMetadata {
 
 		static final Object PLACEHOLDER = new Object();
 
@@ -206,7 +204,6 @@ public class ParameterMetadataProvider {
 		private final EscapeCharacter escape;
 		private final boolean ignoreCase;
 		private final boolean noWildcards;
-		private final @Nullable Object value;
 
 		/**
 		 * Creates a new {@link ParameterMetadata}.
@@ -214,7 +211,6 @@ public class ParameterMetadataProvider {
 		public ParameterMetadata(Class<?> parameterType, Part part, @Nullable Object value, EscapeCharacter escape,
 				int position, JpqlQueryTemplates templates) {
 
-			this.value = null;
 			this.parameterType = parameterType;
 			this.position = position;
 			this.templates = templates;
@@ -222,18 +218,6 @@ public class ParameterMetadataProvider {
 			this.ignoreCase = IgnoreCaseType.ALWAYS.equals(part.shouldIgnoreCase());
 			this.noWildcards = part.getProperty().getLeafProperty().isCollection();
 			this.escape = escape;
-		}
-
-		public ParameterMetadata(Object value, Type type, int position, JpqlQueryTemplates templates,
-				EscapeCharacter escape, boolean ignoreCase, boolean noWildcards) {
-			this.value = value;
-			this.parameterType = value.getClass();
-			this.type = type;
-			this.position = position;
-			this.templates = templates;
-			this.escape = escape;
-			this.ignoreCase = ignoreCase;
-			this.noWildcards = noWildcards;
 		}
 
 		public int getPosition() {
@@ -326,9 +310,5 @@ public class ParameterMetadataProvider {
 					.collect(Collectors.toList());
 		}
 
-		@Nullable
-		public Object getValue() {
-			return this.value;
-		}
 	}
 }

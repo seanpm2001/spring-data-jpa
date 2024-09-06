@@ -73,7 +73,7 @@ class QueryParameterSetterFactoryUnitTests {
 	void exceptionWhenCriteriaQueryContainsInsufficientAmountOfParameters() {
 
 		// no parameter present in the criteria query
-		List<ParameterMetadataProvider.ParameterMetadata<?>> metadata = Collections.emptyList();
+		List<ParameterMetadataProvider.ParameterMetadata> metadata = Collections.emptyList();
 		QueryParameterSetterFactory setterFactory = QueryParameterSetterFactory.forPartTreeQuery(parameters, metadata);
 
 		// one argument present in the method signature

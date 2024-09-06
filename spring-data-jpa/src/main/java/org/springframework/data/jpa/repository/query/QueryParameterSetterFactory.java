@@ -69,9 +69,9 @@ abstract class QueryParameterSetterFactory {
 	 *
 	 * @param parameters must not be {@literal null}.
 	 * @param metadata must not be {@literal null}.
-	 * @return a {@link QueryParameterSetterFactory} for criteria Queries.
+	 * @return a {@link QueryParameterSetterFactory} for Part-Tree Queries.
 	 */
-	static QueryParameterSetterFactory forPartTreeQuery(JpaParameters parameters, List<ParameterMetadata<?>> metadata) {
+	static QueryParameterSetterFactory forPartTreeQuery(JpaParameters parameters, List<ParameterMetadata> metadata) {
 
 		Assert.notNull(parameters, "JpaParameters must not be null");
 		Assert.notNull(metadata, "ParameterMetadata must not be null");
@@ -79,6 +79,12 @@ abstract class QueryParameterSetterFactory {
 		return new PartTreeQueryParameterSetterFactory(parameters, metadata);
 	}
 
+	/**
+	 * Creates a new {@link QueryParameterSetterFactory} to bind
+	 * {@link org.springframework.data.jpa.repository.query.ParameterBinding.Synthetic} parameters.
+	 *
+	 * @return a {@link QueryParameterSetterFactory} for JPQL Queries.
+	 */
 	static QueryParameterSetterFactory forSynthetic() {
 		return new SyntheticParameterSetterFactory();
 	}
@@ -293,7 +299,7 @@ abstract class QueryParameterSetterFactory {
 	private static class PartTreeQueryParameterSetterFactory extends QueryParameterSetterFactory {
 
 		private final JpaParameters parameters;
-		private final List<ParameterMetadata<?>> parameterMetadata;
+		private final List<ParameterMetadata> parameterMetadata;
 
 		/**
 		 * Creates a new {@link QueryParameterSetterFactory} from the given {@link JpaParameters} and
@@ -302,7 +308,7 @@ abstract class QueryParameterSetterFactory {
 		 * @param parameters must not be {@literal null}.
 		 * @param metadata must not be {@literal null}.
 		 */
-		PartTreeQueryParameterSetterFactory(JpaParameters parameters, List<ParameterMetadata<?>> metadata) {
+		PartTreeQueryParameterSetterFactory(JpaParameters parameters, List<ParameterMetadata> metadata) {
 
 			Assert.notNull(parameters, "JpaParameters must not be null");
 			Assert.notNull(metadata, "Expressions must not be null");
@@ -329,7 +335,7 @@ abstract class QueryParameterSetterFactory {
 					) //
 			);
 
-			ParameterMetadata<?> metadata = parameterMetadata.get(parameterIndex);
+			ParameterMetadata metadata = parameterMetadata.get(parameterIndex);
 
 			if (metadata.isIsNullParameter()) {
 				return QueryParameterSetter.NOOP;
@@ -341,7 +347,7 @@ abstract class QueryParameterSetterFactory {
 		}
 
 		@Nullable
-		private Object getAndPrepare(JpaParameter parameter, ParameterMetadata<?> metadata,
+		private Object getAndPrepare(JpaParameter parameter, ParameterMetadata metadata,
 				JpaParametersParameterAccessor accessor) {
 			return metadata.prepare(accessor.getValue(parameter));
 		}

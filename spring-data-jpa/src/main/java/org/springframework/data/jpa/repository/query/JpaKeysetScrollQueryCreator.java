@@ -22,6 +22,7 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.springframework.data.domain.KeysetScrollPosition;
 import org.springframework.data.domain.Sort;
@@ -42,7 +43,7 @@ class JpaKeysetScrollQueryCreator extends JpaQueryCreator {
 	private final JpaEntityInformation<?, ?> entityInformation;
 	private final KeysetScrollPosition scrollPosition;
 	private final ParameterMetadataProvider provider;
-	private final List<ParameterBinding> bindings = new ArrayList<>();
+	private final List<ParameterBinding.Synthetic> bindings = new ArrayList<>();
 
 	public JpaKeysetScrollQueryCreator(PartTree tree, ReturnedType type, ParameterMetadataProvider provider,
 			JpqlQueryTemplates templates, JpaEntityInformation<?, ?> entityInformation, KeysetScrollPosition scrollPosition,
@@ -56,7 +57,7 @@ class JpaKeysetScrollQueryCreator extends JpaQueryCreator {
 	}
 
 	@Override
-	List<ParameterBinding> getParameterBindings() {
+	List<ParameterBinding.Synthetic> getSyntheticParameterBindings() {
 		return bindings;
 	}
 
@@ -65,17 +66,15 @@ class JpaKeysetScrollQueryCreator extends JpaQueryCreator {
 
 		KeysetScrollSpecification<Object> keysetSpec = new KeysetScrollSpecification<>(scrollPosition, sort,
 				entityInformation);
-		JpqlQueryBuilder.Predicate keysetPredicate = keysetSpec.createJpqlPredicate(getFrom(), getEntity(), value -> {
-
-			int position = provider.nextPosition();
-			bindings.add(new ParameterBinding(ParameterBinding.BindingIdentifier.of(position + 1),
-					ParameterBinding.ParameterOrigin.synthetic(value)));
-
-			return JpqlQueryBuilder.expression(render(position));
-		});
 
 		JpqlQueryBuilder.Select query = buildQuery(keysetSpec.sort());
 
+		AtomicInteger counter = new AtomicInteger(provider.getExpressions().size());
+		JpqlQueryBuilder.Predicate keysetPredicate = keysetSpec.createJpqlPredicate(getFrom(), getEntity(), value -> {
+
+			bindings.add(ParameterBinding.ParameterOrigin.synthetic(value));
+			return JpqlQueryBuilder.expression(render(counter.getAndIncrement()));
+		});
 		JpqlQueryBuilder.Predicate predicateToUse = getPredicate(predicate, keysetPredicate);
 
 		if (predicateToUse != null) {

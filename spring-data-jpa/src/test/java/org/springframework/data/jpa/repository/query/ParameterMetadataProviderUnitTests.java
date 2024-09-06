@@ -85,6 +85,6 @@ class ParameterMetadataProviderUnitTests {
 	private ParameterMetadataProvider.ParameterMetadata createParameterMetadata(Part.Type partType) {
 
 		when(part.getType()).thenReturn(partType);
-		return new ParameterMetadataProvider.ParameterMetadata<>(part.getProperty().getType(), part, null, EscapeCharacter.DEFAULT, 1, JpqlQueryTemplates.LOWER);
+		return new ParameterMetadataProvider.ParameterMetadata(part.getProperty().getType(), part, null, EscapeCharacter.DEFAULT, 1, JpqlQueryTemplates.LOWER);
 	}
 }

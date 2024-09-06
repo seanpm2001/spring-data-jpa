@@ -18,6 +18,7 @@ package org.springframework.data.jpa.repository.query;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceUnitUtil;
 import jakarta.persistence.Query;
+import jakarta.persistence.Tuple;
 import jakarta.persistence.TypedQuery;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
@@ -226,14 +227,14 @@ public class PartTreeJpaQuery extends AbstractJpaQuery {
 			Query query;
 
 			try {
-				query = em.createQuery(jpql);
+				query = creator.useTupleQuery() ? em.createQuery(jpql, Tuple.class) : em.createQuery(jpql);
 			} catch (Exception e) {
 				throw new BadJpqlGrammarException(e.getMessage(), jpql, e);
 			}
 
-			List<ParameterMetadataProvider.ParameterMetadata<?>> expressions = creator.getParameterExpressions();
+			List<ParameterMetadataProvider.ParameterMetadata> expressions = creator.getParameterExpressions();
 			ParameterBinder binder = ParameterBinderFactory.createCriteriaBinder(parameters, expressions,
-					creator.getParameterBindings());
+					creator.getSyntheticParameterBindings());
 
 			ScrollPosition scrollPosition = accessor.getParameters().hasScrollPositionParameter()
 					? accessor.getScrollPosition()

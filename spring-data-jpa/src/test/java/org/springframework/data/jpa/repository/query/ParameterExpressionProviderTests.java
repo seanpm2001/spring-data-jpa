@@ -60,7 +60,7 @@ class ParameterExpressionProviderTests {
 		CriteriaBuilder builder = em.getCriteriaBuilder();
 		ParameterMetadataProvider provider = new ParameterMetadataProvider(builder, accessor, EscapeCharacter.DEFAULT,
 				JpqlQueryTemplates.UPPER);
-		ParameterMetadataProvider.ParameterMetadata<? extends Comparable> parameter = provider.next(part, Comparable.class);
+		ParameterMetadataProvider.ParameterMetadata parameter = provider.next(part, Comparable.class);
 
 		assertThat(parameter.getParameterType()).isEqualTo(Integer.TYPE);
 	}

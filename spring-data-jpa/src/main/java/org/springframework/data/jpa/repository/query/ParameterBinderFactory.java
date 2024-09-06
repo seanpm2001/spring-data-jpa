@@ -59,18 +59,21 @@ class ParameterBinderFactory {
 	 *
 	 * @param parameters method parameters that are available for binding, must not be {@literal null}.
 	 * @param metadata parameter metadata for method argument parameters, must not be {@literal null}.
-	 * @param bindings additional (e.g. synthetic) bindings, must not be {@literal null}.
+	 * @param syntheticBindings additional (e.g. synthetic) syntheticBindings, must not be {@literal null}.
 	 * @return a {@link ParameterBinder} that can assign values for the method parameters to query parameters of a
 	 *         {@link jakarta.persistence.criteria.CriteriaQuery}
 	 */
-	static ParameterBinder createCriteriaBinder(JpaParameters parameters, List<ParameterMetadata<?>> metadata,
-			List<ParameterBinding> bindings) {
+	static ParameterBinder createCriteriaBinder(JpaParameters parameters, List<ParameterMetadata> metadata,
+			List<ParameterBinding.Synthetic> syntheticBindings) {
 
 		Assert.notNull(parameters, "JpaParameters must not be null");
 		Assert.notNull(metadata, "Parameter metadata must not be null");
 
 		List<ParameterBinding> bindingsToUse = getBindings(parameters);
-		bindingsToUse.addAll(bindings);
+		int offset = bindingsToUse.size();
+		for (ParameterBinding.Synthetic binding : syntheticBindings) {
+			bindingsToUse.add(new ParameterBinding(BindingIdentifier.of(++offset), binding));
+		}
 
 		return new ParameterBinder(parameters,
 				createSetters(bindingsToUse, QueryParameterSetterFactory.forPartTreeQuery(parameters, metadata),

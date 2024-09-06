@@ -543,6 +543,10 @@ public final class JpqlQueryBuilder {
 				}
 
 				builder.append(context.prefixWithAlias(source, path));
+
+				if (!path.contains(".")) {
+					builder.append(" ").append(path);
+				}
 			}
 
 			return builder.toString();
