@@ -72,6 +72,7 @@ interface QueryParameterSetter {
 			this.temporalType = temporalType;
 		}
 
+		// TODO: Refactor to use Spring's ErrorHandler instead of using a capturing ErrorHandling approach.
 		@SuppressWarnings("unchecked")
 		@Override
 		public void setParameter(BindableQuery query, JpaParametersParameterAccessor accessor,

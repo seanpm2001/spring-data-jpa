@@ -262,16 +262,12 @@ abstract class QueryParameterSetterFactory {
 
 			Assert.notNull(binding, "Binding must not be null");
 
-			JpaParameter parameter;
 			if (!(binding.getOrigin() instanceof MethodInvocationArgument mia)) {
-				return QueryParameterSetter.NOOP;
-			}
-
-			if (binding.getOrigin() instanceof ParameterBinding.Synthetic) {
 				return null;
 			}
 
 			BindingIdentifier identifier = mia.identifier();
+			JpaParameter parameter;
 
 			if (declaredQuery.hasNamedParameter()) {
 				parameter = findParameterForBinding(parameters, identifier.getName());
@@ -281,11 +277,11 @@ abstract class QueryParameterSetterFactory {
 
 			return parameter == null //
 					? QueryParameterSetter.NOOP //
-					: createSetter(values -> getValue(values, parameter, binding), binding, parameter);
+					: createSetter(values -> getValue(values, parameter), binding, parameter);
 		}
 
 		@Nullable
-		protected Object getValue(JpaParametersParameterAccessor accessor, Parameter parameter, ParameterBinding binding) {
+		protected Object getValue(JpaParametersParameterAccessor accessor, Parameter parameter) {
 			return accessor.getValue(parameter);
 		}
 	}
