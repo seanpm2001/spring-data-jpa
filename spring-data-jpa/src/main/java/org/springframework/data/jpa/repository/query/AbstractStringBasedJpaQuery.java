@@ -52,7 +52,6 @@ abstract class AbstractStringBasedJpaQuery extends AbstractJpaQuery {
 	private final Lazy<DeclaredQuery> countQuery;
 	private final QueryMethodEvaluationContextProvider evaluationContextProvider;
 	private final SpelExpressionParser parser;
-	private final QueryParameterSetter.QueryMetadataCache metadataCache = new QueryParameterSetter.QueryMetadataCache();
 	private final QueryRewriter queryRewriter;
 	private final QuerySortRewriter querySortRewriter;
 	private final Lazy<ParameterBinder> countParameterBinder;
@@ -123,11 +122,9 @@ abstract class AbstractStringBasedJpaQuery extends AbstractJpaQuery {
 
 		Query query = createJpaQuery(sortedQueryString, sort, accessor.getPageable(), processor.getReturnedType());
 
-		QueryParameterSetter.QueryMetadata metadata = metadataCache.getMetadata(sortedQueryString, query);
-
 		// it is ok to reuse the binding contained in the ParameterBinder although we create a new query String because the
 		// parameters in the query do not change.
-		return parameterBinder.get().bindAndPrepare(query, metadata, accessor);
+		return parameterBinder.get().bindAndPrepare(query, accessor);
 	}
 
 	String getSortedQueryString(Sort sort) {
@@ -154,9 +151,8 @@ abstract class AbstractStringBasedJpaQuery extends AbstractJpaQuery {
 				? em.createNativeQuery(queryString) //
 				: em.createQuery(queryString, Long.class);
 
-		QueryParameterSetter.QueryMetadata metadata = metadataCache.getMetadata(queryString, query);
-
-		countParameterBinder.get().bind(metadata.withQuery(query), accessor, QueryParameterSetter.ErrorHandling.LENIENT);
+		countParameterBinder.get().bind(new QueryParameterSetter.BindableQuery(query), accessor,
+				QueryParameterSetter.ErrorHandling.LENIENT);
 
 		return query;
 	}

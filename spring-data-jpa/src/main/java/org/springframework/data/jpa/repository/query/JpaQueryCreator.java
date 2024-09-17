@@ -27,13 +27,13 @@ import jakarta.persistence.metamodel.SingularAttribute;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.JpaSort;
 import org.springframework.data.jpa.repository.query.JpqlQueryBuilder.PathAndOrigin;
+import org.springframework.data.jpa.repository.query.ParameterBinding.PartTreeParameterBinding;
 import org.springframework.data.jpa.repository.query.ParameterMetadataProvider.ParameterMetadata;
 import org.springframework.data.jpa.repository.support.JpqlQueryTemplates;
 import org.springframework.data.mapping.PropertyPath;
@@ -58,7 +58,7 @@ import org.springframework.util.Assert;
  * @author Andrey Kovalev
  * @author Greg Turnquist
  */
-public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuilder.Predicate> {
+class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuilder.Predicate> {
 
 	private final ReturnedType returnedType;
 	private final ParameterMetadataProvider provider;
@@ -109,12 +109,8 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 	 *
 	 * @return the parameterExpressions
 	 */
-	public List<ParameterMetadata> getParameterExpressions() {
-		return provider.getExpressions();
-	}
-
-	List<ParameterBinding.Synthetic> getSyntheticParameterBindings() {
-		return Collections.emptyList();
+	public List<ParameterBinding> getBindings() {
+		return provider.getBindings();
 	}
 
 	@Override
@@ -254,8 +250,12 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 		return returnedType.getInputProperties();
 	}
 
+	String render(ParameterBinding binding) {
+		return render(binding.getRequiredPosition());
+	}
+
 	String render(int position) {
-		return "?" + (position + 1);
+		return "?" + position;
 	}
 
 	private String render(ParameterMetadata metadata) {
@@ -311,8 +311,8 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 
 			switch (type) {
 				case BETWEEN:
-					ParameterMetadata first = provider.next(part);
-					ParameterMetadata second = provider.next(part);
+					PartTreeParameterBinding first = provider.next(part);
+					ParameterBinding second = provider.next(part);
 					return where.between(render(first), render(second));
 				case AFTER:
 				case GREATER_THAN:
@@ -347,7 +347,7 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 				case LIKE:
 				case NOT_LIKE:
 
-					ParameterMetadata parameter = provider.next(part, String.class);
+					PartTreeParameterBinding parameter = provider.next(part, String.class);
 					JpqlQueryBuilder.Expression parameterExpression = potentiallyIgnoreCase(part.getProperty(),
 							JpqlQueryBuilder.parameter(render(parameter)));
 					// Predicate like = builder.like(propertyExpression, parameterExpression, escape.getEscapeCharacter());
@@ -362,7 +362,7 @@ public class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuild
 				case FALSE:
 					return where.isFalse();
 				case SIMPLE_PROPERTY:
-					ParameterMetadata metadata = provider.next(part);
+					PartTreeParameterBinding metadata = provider.next(part);
 
 					if (metadata.isIsNullParameter()) {
 						return where.isNull();

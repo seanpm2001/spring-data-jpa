@@ -23,8 +23,6 @@ import jakarta.persistence.TypedQuery;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 
-import java.util.List;
-
 import org.springframework.data.domain.KeysetScrollPosition;
 import org.springframework.data.domain.OffsetScrollPosition;
 import org.springframework.data.domain.ScrollPosition;
@@ -95,15 +93,12 @@ public class PartTreeJpaQuery extends AbstractJpaQuery {
 		PersistenceUnitUtil persistenceUnitUtil = em.getEntityManagerFactory().getPersistenceUnitUtil();
 		this.entityInformation = new JpaMetamodelEntityInformation<>(domainClass, em.getMetamodel(), persistenceUnitUtil);
 
-		boolean recreationRequired = parameters.hasDynamicProjection() || parameters.potentiallySortsDynamically()
-				|| method.isScrollQuery();
-
 		try {
 
 			this.tree = new PartTree(method.getName(), domainClass);
 			validate(tree, parameters, method.toString());
-			this.countQuery = new CountQueryPreparer(recreationRequired);
-			this.query = tree.isCountProjection() ? countQuery : new QueryPreparer(recreationRequired);
+			this.countQuery = new CountQueryPreparer();
+			this.query = tree.isCountProjection() ? countQuery : new QueryPreparer();
 
 		} catch (Exception o_O) {
 			throw new IllegalArgumentException(
@@ -210,12 +205,6 @@ public class PartTreeJpaQuery extends AbstractJpaQuery {
 	 */
 	private class QueryPreparer {
 
-		private final QueryParameterSetter.QueryMetadataCache metadataCache = new QueryParameterSetter.QueryMetadataCache();
-
-		// TODO: Cache AbstractQuery
-
-		QueryPreparer(boolean recreateQueries) {}
-
 		/**
 		 * Creates a new {@link Query} for the given parameter values.
 		 */
@@ -232,14 +221,12 @@ public class PartTreeJpaQuery extends AbstractJpaQuery {
 				throw new BadJpqlGrammarException(e.getMessage(), jpql, e);
 			}
 
-			List<ParameterMetadataProvider.ParameterMetadata> expressions = creator.getParameterExpressions();
-			ParameterBinder binder = ParameterBinderFactory.createCriteriaBinder(parameters, expressions,
-					creator.getSyntheticParameterBindings());
+			ParameterBinder binder = ParameterBinderFactory.createBinder(parameters, creator.getBindings());
 
 			ScrollPosition scrollPosition = accessor.getParameters().hasScrollPositionParameter()
 					? accessor.getScrollPosition()
 					: null;
-			return restrictMaxResultsIfNecessary(invokeBinding(binder, query, accessor, this.metadataCache), scrollPosition);
+			return restrictMaxResultsIfNecessary(invokeBinding(binder, query, accessor), scrollPosition);
 		}
 
 		/**
@@ -306,12 +293,8 @@ public class PartTreeJpaQuery extends AbstractJpaQuery {
 		/**
 		 * Invokes parameter binding on the given {@link TypedQuery}.
 		 */
-		protected Query invokeBinding(ParameterBinder binder, Query query, JpaParametersParameterAccessor accessor,
-				QueryParameterSetter.QueryMetadataCache metadataCache) {
-
-			QueryParameterSetter.QueryMetadata metadata = metadataCache.getMetadata("query", query);
-
-			return binder.bindAndPrepare(query, metadata, accessor);
+		protected Query invokeBinding(ParameterBinder binder, Query query, JpaParametersParameterAccessor accessor) {
+			return binder.bindAndPrepare(query, accessor);
 		}
 
 		private Sort getDynamicSort(JpaParametersParameterAccessor accessor) {
@@ -329,10 +312,6 @@ public class PartTreeJpaQuery extends AbstractJpaQuery {
 	 * @author Thomas Darimont
 	 */
 	private class CountQueryPreparer extends QueryPreparer {
-
-		CountQueryPreparer(boolean recreateQueries) {
-			super(recreateQueries);
-		}
 
 		@Override
 		protected JpaQueryCreator createCreator(@Nullable JpaParametersParameterAccessor accessor) {
@@ -356,12 +335,8 @@ public class PartTreeJpaQuery extends AbstractJpaQuery {
 		 * Customizes binding by skipping the pagination.
 		 */
 		@Override
-		protected Query invokeBinding(ParameterBinder binder, Query query, JpaParametersParameterAccessor accessor,
-				QueryParameterSetter.QueryMetadataCache metadataCache) {
-
-			QueryParameterSetter.QueryMetadata metadata = metadataCache.getMetadata("countquery", query);
-
-			return binder.bind(query, metadata, accessor);
+		protected Query invokeBinding(ParameterBinder binder, Query query, JpaParametersParameterAccessor accessor) {
+			return binder.bind(query, accessor);
 		}
 	}
 }

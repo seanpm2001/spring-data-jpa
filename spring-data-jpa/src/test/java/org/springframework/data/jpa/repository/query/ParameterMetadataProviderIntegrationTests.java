@@ -27,7 +27,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.springframework.data.jpa.domain.sample.User;
-import org.springframework.data.jpa.repository.query.ParameterMetadataProvider.ParameterMetadata;
 import org.springframework.data.jpa.repository.support.JpqlQueryTemplates;
 import org.springframework.data.repository.query.Param;
 import org.springframework.data.repository.query.Parameters;
@@ -72,9 +71,9 @@ class ParameterMetadataProviderIntegrationTests {
 	void doesNotApplyLikeExpansionOnNonStringProperties() throws Exception {
 
 		ParameterMetadataProvider provider = createProvider(Sample.class.getMethod("findByAgeContaining", Integer.class));
-		ParameterMetadata metadata = provider.next(new Part("ageContaining", User.class));
+		ParameterBinding.PartTreeParameterBinding binding = provider.next(new Part("ageContaining", User.class));
 
-		assertThat(metadata.prepare(1)).isEqualTo(1);
+		assertThat(binding.prepare(1)).isEqualTo(1);
 	}
 
 	private ParameterMetadataProvider createProvider(Method method) {

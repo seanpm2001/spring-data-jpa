@@ -18,13 +18,11 @@ package org.springframework.data.jpa.repository.query;
 import jakarta.persistence.Query;
 import jakarta.persistence.TemporalType;
 
-import java.util.List;
 import java.util.function.Function;
 
 import org.springframework.data.jpa.repository.query.JpaParameters.JpaParameter;
 import org.springframework.data.jpa.repository.query.ParameterBinding.BindingIdentifier;
 import org.springframework.data.jpa.repository.query.ParameterBinding.MethodInvocationArgument;
-import org.springframework.data.jpa.repository.query.ParameterMetadataProvider.ParameterMetadata;
 import org.springframework.data.jpa.repository.query.QueryParameterSetter.NamedOrIndexedQueryParameterSetter;
 import org.springframework.data.repository.query.Parameter;
 import org.springframework.data.repository.query.Parameters;
@@ -64,19 +62,16 @@ abstract class QueryParameterSetterFactory {
 	}
 
 	/**
-	 * Creates a new {@link QueryParameterSetterFactory} using the given {@link JpaParameters} and
-	 * {@link ParameterMetadata}.
+	 * Creates a new {@link QueryParameterSetterFactory} using the given {@link JpaParameters}.
 	 *
 	 * @param parameters must not be {@literal null}.
-	 * @param metadata must not be {@literal null}.
 	 * @return a {@link QueryParameterSetterFactory} for Part-Tree Queries.
 	 */
-	static QueryParameterSetterFactory forPartTreeQuery(JpaParameters parameters, List<ParameterMetadata> metadata) {
+	static QueryParameterSetterFactory forPartTreeQuery(JpaParameters parameters) {
 
 		Assert.notNull(parameters, "JpaParameters must not be null");
-		Assert.notNull(metadata, "ParameterMetadata must not be null");
 
-		return new PartTreeQueryParameterSetterFactory(parameters, metadata);
+		return new PartTreeQueryParameterSetterFactory(parameters);
 	}
 
 	/**
@@ -272,6 +267,10 @@ abstract class QueryParameterSetterFactory {
 				return QueryParameterSetter.NOOP;
 			}
 
+			if (binding.getOrigin() instanceof ParameterBinding.Synthetic) {
+				return null;
+			}
+
 			BindingIdentifier identifier = mia.identifier();
 
 			if (declaredQuery.hasNamedParameter()) {
@@ -282,11 +281,11 @@ abstract class QueryParameterSetterFactory {
 
 			return parameter == null //
 					? QueryParameterSetter.NOOP //
-					: createSetter(values -> getValue(values, parameter), binding, parameter);
+					: createSetter(values -> getValue(values, parameter, binding), binding, parameter);
 		}
 
 		@Nullable
-		private Object getValue(JpaParametersParameterAccessor accessor, Parameter parameter) {
+		protected Object getValue(JpaParametersParameterAccessor accessor, Parameter parameter, ParameterBinding binding) {
 			return accessor.getValue(parameter);
 		}
 	}
@@ -294,62 +293,46 @@ abstract class QueryParameterSetterFactory {
 	/**
 	 * @author Jens Schauder
 	 * @author Oliver Gierke
+	 * @author Mark Paluch
 	 * @see QueryParameterSetterFactory
 	 */
-	private static class PartTreeQueryParameterSetterFactory extends QueryParameterSetterFactory {
+	private static class PartTreeQueryParameterSetterFactory extends BasicQueryParameterSetterFactory {
 
 		private final JpaParameters parameters;
-		private final List<ParameterMetadata> parameterMetadata;
 
-		/**
-		 * Creates a new {@link QueryParameterSetterFactory} from the given {@link JpaParameters} and
-		 * {@link ParameterMetadata}.
-		 *
-		 * @param parameters must not be {@literal null}.
-		 * @param metadata must not be {@literal null}.
-		 */
-		PartTreeQueryParameterSetterFactory(JpaParameters parameters, List<ParameterMetadata> metadata) {
-
-			Assert.notNull(parameters, "JpaParameters must not be null");
-			Assert.notNull(metadata, "Expressions must not be null");
-
-			this.parameters = parameters;
-			this.parameterMetadata = metadata;
+		private PartTreeQueryParameterSetterFactory(JpaParameters parameters) {
+			super(parameters);
+			this.parameters = parameters.getBindableParameters();
 		}
 
 		@Override
 		public QueryParameterSetter create(ParameterBinding binding, DeclaredQuery declaredQuery) {
 
-			if (binding.getOrigin() instanceof ParameterBinding.Synthetic) {
+			if (!binding.getOrigin().isMethodArgument()) {
 				return null;
 			}
 
 			int parameterIndex = binding.getRequiredPosition() - 1;
 
 			Assert.isTrue( //
-					parameterIndex < parameterMetadata.size(), //
+					parameterIndex < parameters.getNumberOfParameters(), //
 					() -> String.format( //
 							"At least %s parameter(s) provided but only %s parameter(s) present in query", //
 							binding.getRequiredPosition(), //
-							parameterMetadata.size() //
+							parameters.getNumberOfParameters() //
 					) //
 			);
 
-			ParameterMetadata metadata = parameterMetadata.get(parameterIndex);
+			if (binding instanceof ParameterBinding.PartTreeParameterBinding ptb) {
 
-			if (metadata.isIsNullParameter()) {
-				return QueryParameterSetter.NOOP;
+				if (ptb.isIsNullParameter()) {
+					return QueryParameterSetter.NOOP;
+				}
+
+				return super.create(binding, declaredQuery);
 			}
 
-			JpaParameter parameter = parameters.getBindableParameter(parameterIndex);
-			return QueryParameterSetterFactory.createSetter(values -> getAndPrepare(parameter, metadata, values), binding,
-					parameter);
-		}
-
-		@Nullable
-		private Object getAndPrepare(JpaParameter parameter, ParameterMetadata metadata,
-				JpaParametersParameterAccessor accessor) {
-			return metadata.prepare(accessor.getValue(parameter));
+			return null;
 		}
 	}
 

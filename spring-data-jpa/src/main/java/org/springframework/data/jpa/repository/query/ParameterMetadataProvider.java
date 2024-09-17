@@ -15,6 +15,8 @@
  */
 package org.springframework.data.jpa.repository.query;
 
+import static org.springframework.data.jpa.repository.query.ParameterBinding.*;
+
 import jakarta.persistence.criteria.CriteriaBuilder;
 
 import java.util.ArrayList;
@@ -53,10 +55,10 @@ import org.springframework.util.ObjectUtils;
  * @author Donghun Shin
  * @author Greg Turnquist
  */
-public class ParameterMetadataProvider {
+class ParameterMetadataProvider {
 
 	private final Iterator<? extends Parameter> parameters;
-	private final List<ParameterMetadata> expressions;
+	private final List<ParameterBinding> bindings;
 	private final @Nullable Iterator<Object> bindableParameterValues;
 	private final EscapeCharacter escape;
 	private final JpqlQueryTemplates templates;
@@ -109,26 +111,26 @@ public class ParameterMetadataProvider {
 		Assert.notNull(templates, "JpqlQueryTemplates must not be null");
 
 		this.parameters = parameters.getBindableParameters().iterator();
-		this.expressions = new ArrayList<>();
+		this.bindings = new ArrayList<>();
 		this.bindableParameterValues = bindableParameterValues;
 		this.escape = escape;
 		this.templates = templates;
 	}
 
 	/**
-	 * Returns all {@link ParameterMetadata}s built.
+	 * Returns all {@link ParameterBinding}s built.
 	 *
-	 * @return the expressions
+	 * @return the bindings.
 	 */
-	public List<ParameterMetadata> getExpressions() {
-		return expressions;
+	public List<ParameterBinding> getBindings() {
+		return bindings;
 	}
 
 	/**
-	 * Builds a new {@link ParameterMetadata} for given {@link Part} and the next {@link Parameter}.
+	 * Builds a new {@link PartTreeParameterBinding} for given {@link Part} and the next {@link Parameter}.
 	 */
 	@SuppressWarnings("unchecked")
-	public <T> ParameterMetadata next(Part part) {
+	public <T> PartTreeParameterBinding next(Part part) {
 
 		Assert.isTrue(parameters.hasNext(), () -> String.format("No parameter available for part %s", part));
 
@@ -137,7 +139,7 @@ public class ParameterMetadataProvider {
 	}
 
 	/**
-	 * Builds a new {@link ParameterMetadata} of the given {@link Part} and type. Forwards the underlying
+	 * Builds a new {@link PartTreeParameterBinding} of the given {@link Part} and type. Forwards the underlying
 	 * {@link Parameters} as well.
 	 *
 	 * @param <T> is the type parameter of the returned {@link ParameterMetadata}.
@@ -145,7 +147,7 @@ public class ParameterMetadataProvider {
 	 * @return ParameterMetadata for the next parameter.
 	 */
 	@SuppressWarnings("unchecked")
-	public <T> ParameterMetadata next(Part part, Class<T> type) {
+	public <T> PartTreeParameterBinding next(Part part, Class<T> type) {
 
 		Parameter parameter = parameters.next();
 		Class<?> typeToUse = ClassUtils.isAssignable(type, parameter.getType()) ? parameter.getType() : type;
@@ -153,7 +155,7 @@ public class ParameterMetadataProvider {
 	}
 
 	/**
-	 * Builds a new {@link ParameterMetadata} for the given type and name.
+	 * Builds a new {@link PartTreeParameterBinding} for the given type and name.
 	 *
 	 * @param <T> type parameter for the returned {@link ParameterMetadata}.
 	 * @param part must not be {@literal null}.
@@ -161,7 +163,7 @@ public class ParameterMetadataProvider {
 	 * @param parameter providing the name for the returned {@link ParameterMetadata}.
 	 * @return a new {@link ParameterMetadata} for the given type and name.
 	 */
-	private <T> ParameterMetadata next(Part part, Class<T> type, Parameter parameter) {
+	private <T> PartTreeParameterBinding next(Part part, Class<T> type, Parameter parameter) {
 
 		Assert.notNull(type, "Type must not be null");
 
@@ -173,19 +175,36 @@ public class ParameterMetadataProvider {
 
 		Object value = bindableParameterValues == null ? ParameterMetadata.PLACEHOLDER : bindableParameterValues.next();
 
-		int currentPosition = position++;
-		ParameterMetadata metadata = new ParameterMetadata(reifiedType, part, value, escape, currentPosition, templates);
-		expressions.add(metadata);
+		int currentPosition = ++position;
 
-		return metadata;
-	}
+		BindingIdentifier bindingIdentifier = BindingIdentifier.of(currentPosition);
 
-	public int nextPosition() {
-		return position++;
+		/* identifier refers to bindable parameters, not _all_ parameters index */
+		MethodInvocationArgument methodParameter = ParameterOrigin.ofParameter(bindingIdentifier);
+		PartTreeParameterBinding binding = new PartTreeParameterBinding(bindingIdentifier, methodParameter, reifiedType,
+				part, value, templates, escape);
+
+		bindings.add(binding);
+
+		return binding;
 	}
 
 	EscapeCharacter getEscape() {
 		return escape;
+	}
+
+	/**
+	 * Builds a new synthetic {@link ParameterBinding} for the given value.
+	 *
+	 * @param value
+	 * @param source
+	 * @return a new {@link ParameterBinding} for the given value and source.
+	 */
+	public ParameterBinding nextSynthetic(Object value, Object source) {
+
+		int currentPosition = ++position;
+
+		return new ParameterBinding(BindingIdentifier.of(currentPosition), ParameterOrigin.synthetic(value, source));
 	}
 
 	/**

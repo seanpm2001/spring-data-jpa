@@ -43,7 +43,7 @@ class JpaKeysetScrollQueryCreator extends JpaQueryCreator {
 	private final JpaEntityInformation<?, ?> entityInformation;
 	private final KeysetScrollPosition scrollPosition;
 	private final ParameterMetadataProvider provider;
-	private final List<ParameterBinding.Synthetic> bindings = new ArrayList<>();
+	private final List<ParameterBinding> syntheticBindings = new ArrayList<>();
 
 	public JpaKeysetScrollQueryCreator(PartTree tree, ReturnedType type, ParameterMetadataProvider provider,
 			JpqlQueryTemplates templates, JpaEntityInformation<?, ?> entityInformation, KeysetScrollPosition scrollPosition,
@@ -57,7 +57,13 @@ class JpaKeysetScrollQueryCreator extends JpaQueryCreator {
 	}
 
 	@Override
-	List<ParameterBinding.Synthetic> getSyntheticParameterBindings() {
+	public List<ParameterBinding> getBindings() {
+
+		List<ParameterBinding> partTreeBindings = super.getBindings();
+		List<ParameterBinding> bindings = new ArrayList<>(partTreeBindings.size() + this.syntheticBindings.size());
+		bindings.addAll(partTreeBindings);
+		bindings.addAll(this.syntheticBindings);
+
 		return bindings;
 	}
 
@@ -69,11 +75,11 @@ class JpaKeysetScrollQueryCreator extends JpaQueryCreator {
 
 		JpqlQueryBuilder.Select query = buildQuery(keysetSpec.sort());
 
-		AtomicInteger counter = new AtomicInteger(provider.getExpressions().size());
+		AtomicInteger counter = new AtomicInteger(provider.getBindings().size());
 		JpqlQueryBuilder.Predicate keysetPredicate = keysetSpec.createJpqlPredicate(getFrom(), getEntity(), value -> {
 
-			bindings.add(ParameterBinding.ParameterOrigin.synthetic(value));
-			return JpqlQueryBuilder.expression(render(counter.getAndIncrement()));
+			syntheticBindings.add(provider.nextSynthetic(value, scrollPosition));
+			return JpqlQueryBuilder.expression(render(counter.incrementAndGet()));
 		});
 		JpqlQueryBuilder.Predicate predicateToUse = getPredicate(predicate, keysetPredicate);
 

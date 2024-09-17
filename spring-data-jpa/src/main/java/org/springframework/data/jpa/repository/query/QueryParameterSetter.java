@@ -23,15 +23,13 @@ import jakarta.persistence.TemporalType;
 import jakarta.persistence.criteria.ParameterExpression;
 
 import java.lang.reflect.Proxy;
-import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+
 import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 
@@ -160,50 +158,6 @@ interface QueryParameterSetter {
 	}
 
 	/**
-	 * Cache for {@link QueryMetadata}. Optimizes for small cache sizes on a best-effort basis.
-	 */
-	class QueryMetadataCache {
-
-		private Map<String, QueryMetadata> cache = Collections.emptyMap();
-
-		/**
-		 * Retrieve the {@link QueryMetadata} for a given {@code cacheKey}.
-		 *
-		 * @param cacheKey
-		 * @param query
-		 * @return
-		 */
-		public QueryMetadata getMetadata(String cacheKey, Query query) {
-
-			if (true) {
-				return new QueryMetadata(query);
-			}
-
-			QueryMetadata queryMetadata = cache.get(cacheKey);
-
-			if (queryMetadata == null) {
-
-				queryMetadata = new QueryMetadata(query);
-
-				Map<String, QueryMetadata> cache;
-
-				if (this.cache.isEmpty()) {
-					cache = Collections.singletonMap(cacheKey, queryMetadata);
-				} else {
-					cache = new HashMap<>(this.cache);
-					cache.put(cacheKey, queryMetadata);
-				}
-
-				synchronized (this) {
-					this.cache = cache;
-				}
-			}
-
-			return queryMetadata;
-		}
-	}
-
-	/**
 	 * Metadata for a JPA {@link Query}.
 	 */
 	class QueryMetadata {
@@ -226,23 +180,6 @@ interface QueryParameterSetter {
 
 			this.registerExcessParameters = query.getParameters().size() == 0
 					&& unwrapClass(query).getName().startsWith("org.eclipse");
-		}
-
-		QueryMetadata(QueryMetadata metadata) {
-
-			this.namedParameters = metadata.namedParameters;
-			this.parameters = metadata.parameters;
-			this.registerExcessParameters = metadata.registerExcessParameters;
-		}
-
-		/**
-		 * Create a {@link BindableQuery} for a {@link Query}.
-		 *
-		 * @param query
-		 * @return
-		 */
-		public BindableQuery withQuery(Query query) {
-			return new BindableQuery(this, query);
 		}
 
 		/**
@@ -298,13 +235,7 @@ interface QueryParameterSetter {
 		private final Query query;
 		private final Query unwrapped;
 
-		BindableQuery(QueryMetadata metadata, Query query) {
-			super(metadata);
-			this.query = query;
-			this.unwrapped = Proxy.isProxyClass(query.getClass()) ? query.unwrap(null) : query;
-		}
-
-		private BindableQuery(Query query) {
+		BindableQuery(Query query) {
 			super(query);
 			this.query = query;
 			this.unwrapped = Proxy.isProxyClass(query.getClass()) ? query.unwrap(null) : query;

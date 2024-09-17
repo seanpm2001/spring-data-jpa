@@ -18,13 +18,12 @@ package org.springframework.data.jpa.repository.query;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import java.util.Collections;
-import java.util.List;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+
 import org.springframework.data.jpa.repository.query.JpaParameters.JpaParameter;
 import org.springframework.data.jpa.repository.query.ParameterBinding.ParameterOrigin;
 
@@ -73,8 +72,7 @@ class QueryParameterSetterFactoryUnitTests {
 	void exceptionWhenCriteriaQueryContainsInsufficientAmountOfParameters() {
 
 		// no parameter present in the criteria query
-		List<ParameterMetadataProvider.ParameterMetadata> metadata = Collections.emptyList();
-		QueryParameterSetterFactory setterFactory = QueryParameterSetterFactory.forPartTreeQuery(parameters, metadata);
+		QueryParameterSetterFactory setterFactory = QueryParameterSetterFactory.forPartTreeQuery(parameters);
 
 		// one argument present in the method signature
 		when(binding.getRequiredPosition()).thenReturn(1);

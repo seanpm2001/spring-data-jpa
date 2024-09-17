@@ -15,15 +15,15 @@
  */
 package org.springframework.data.jpa.repository.query;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.NamedStoredProcedureQuery;
 import jakarta.persistence.ParameterMode;
 import jakarta.persistence.StoredProcedureQuery;
 import jakarta.persistence.TypedQuery;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import org.springframework.data.jpa.repository.query.JpaParameters.JpaParameter;
 import org.springframework.data.repository.query.Parameter;
@@ -50,7 +50,6 @@ class StoredProcedureJpaQuery extends AbstractJpaQuery {
 
 	private final StoredProcedureAttributes procedureAttributes;
 	private final boolean useNamedParameters;
-	private final QueryParameterSetter.QueryMetadataCache metadataCache = new QueryParameterSetter.QueryMetadataCache();
 
 	/**
 	 * Creates a new {@link StoredProcedureJpaQuery}.
@@ -90,9 +89,7 @@ class StoredProcedureJpaQuery extends AbstractJpaQuery {
 	protected StoredProcedureQuery doCreateQuery(JpaParametersParameterAccessor accessor) {
 
 		StoredProcedureQuery storedProcedure = createStoredProcedure();
-		QueryParameterSetter.QueryMetadata metadata = metadataCache.getMetadata("singleton", storedProcedure);
-
-		return parameterBinder.get().bind(storedProcedure, metadata, accessor);
+		return parameterBinder.get().bind(storedProcedure, accessor);
 	}
 
 	@Override

@@ -72,10 +72,10 @@ public class ParameterBinder {
 		this.useJpaForPaging = useJpaForPaging;
 	}
 
-	public <T extends Query> T bind(T jpaQuery, QueryParameterSetter.QueryMetadata metadata,
+	public <T extends Query> T bind(T jpaQuery,
 			JpaParametersParameterAccessor accessor) {
 
-		bind(metadata.withQuery(jpaQuery), accessor, ErrorHandling.STRICT);
+		bind(new QueryParameterSetter.BindableQuery(jpaQuery), accessor, ErrorHandling.STRICT);
 		return jpaQuery;
 	}
 
@@ -94,10 +94,10 @@ public class ParameterBinder {
 	 * @param metadata must not be {@literal null}.
 	 * @param accessor must not be {@literal null}.
 	 */
-	Query bindAndPrepare(Query query, QueryParameterSetter.QueryMetadata metadata,
+	Query bindAndPrepare(Query query,
 			JpaParametersParameterAccessor accessor) {
 
-		bind(query, metadata, accessor);
+		bind(query, accessor);
 
 		Pageable pageable = accessor.getPageable();
 
