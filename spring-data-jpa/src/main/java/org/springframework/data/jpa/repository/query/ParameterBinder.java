@@ -33,6 +33,8 @@ import org.springframework.util.Assert;
  * @author Jens Schauder
  * @author Yanming Zhou
  */
+// TODO: Refactor, do not create a QueryParameterSetter for each parameter but capture strategies and bindings for more
+// efficient binding.
 public class ParameterBinder {
 
 	static final String PARAMETER_NEEDS_TO_BE_NAMED = "For queries with named parameters you need to provide names for method parameters; Use @Param for query method parameters, or when on Java 8+ use the javac flag -parameters";
