@@ -47,12 +47,12 @@ class QueryParameterSetterFactoryUnitTests {
 		// we have one bindable parameter
 		when(parameters.getBindableParameters().iterator()).thenReturn(Stream.of(mock(JpaParameter.class)).iterator());
 
-		setterFactory = QueryParameterSetterFactory.basic(parameters);
+		setterFactory = QueryParameterSetterFactory.basic(parameters, true);
 	}
 
 	@Test // DATAJPA-1058
 	void noExceptionWhenQueryDoesNotContainNamedParameters() {
-		setterFactory.create(binding, DeclaredQuery.of("from Employee e", false));
+		setterFactory.create(binding);
 	}
 
 	@Test // DATAJPA-1058
@@ -61,8 +61,8 @@ class QueryParameterSetterFactoryUnitTests {
 		when(binding.getOrigin()).thenReturn(ParameterOrigin.ofParameter("NamedParameter", 1));
 
 		assertThatExceptionOfType(IllegalStateException.class) //
-				.isThrownBy(() -> setterFactory.create(binding,
-						DeclaredQuery.of("from Employee e where e.name = :NamedParameter", false))) //
+				.isThrownBy(() -> setterFactory.create(binding
+				)) //
 				.withMessageContaining("Java 8") //
 				.withMessageContaining("@Param") //
 				.withMessageContaining("-parameters");
@@ -79,8 +79,7 @@ class QueryParameterSetterFactoryUnitTests {
 		when(binding.getOrigin()).thenReturn(ParameterOrigin.ofParameter(null, 1));
 
 		assertThatExceptionOfType(IllegalArgumentException.class) //
-				.isThrownBy(() -> setterFactory.create(binding,
-						DeclaredQuery.of("from Employee e where e.name = :NamedParameter", false))) //
+				.isThrownBy(() -> setterFactory.create(binding)) //
 				.withMessage("At least 1 parameter(s) provided but only 0 parameter(s) present in query");
 	}
 
@@ -88,14 +87,14 @@ class QueryParameterSetterFactoryUnitTests {
 	void exceptionWhenBasicQueryContainsInsufficientAmountOfParameters() {
 
 		// no parameter present in the criteria query
-		QueryParameterSetterFactory setterFactory = QueryParameterSetterFactory.basic(parameters);
+		QueryParameterSetterFactory setterFactory = QueryParameterSetterFactory.basic(parameters, false);
 
 		// one argument present in the method signature
 		when(binding.getRequiredPosition()).thenReturn(1);
 		when(binding.getOrigin()).thenReturn(ParameterOrigin.ofParameter(null, 1));
 
 		assertThatExceptionOfType(IllegalArgumentException.class) //
-				.isThrownBy(() -> setterFactory.create(binding, DeclaredQuery.of("from Employee e where e.name = ?1", false))) //
+				.isThrownBy(() -> setterFactory.create(binding)) //
 				.withMessage("At least 1 parameter(s) provided but only 0 parameter(s) present in query");
 	}
 }

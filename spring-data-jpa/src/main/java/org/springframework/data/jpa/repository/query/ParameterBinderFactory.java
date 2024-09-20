@@ -39,14 +39,15 @@ class ParameterBinderFactory {
 	 * otherwise.
 	 *
 	 * @param parameters method parameters that are available for binding, must not be {@literal null}.
+	 * @param preferNamedParameters
 	 * @return a {@link ParameterBinder} that can assign values for the method parameters to query parameters of a
 	 *         {@link jakarta.persistence.Query}
 	 */
-	static ParameterBinder createBinder(JpaParameters parameters) {
+	static ParameterBinder createBinder(JpaParameters parameters, boolean preferNamedParameters) {
 
 		Assert.notNull(parameters, "JpaParameters must not be null");
 
-		QueryParameterSetterFactory setterFactory = QueryParameterSetterFactory.basic(parameters);
+		QueryParameterSetterFactory setterFactory = QueryParameterSetterFactory.basic(parameters, preferNamedParameters);
 		List<ParameterBinding> bindings = getBindings(parameters);
 
 		return new ParameterBinder(parameters, createSetters(bindings, setterFactory));
@@ -95,7 +96,8 @@ class ParameterBinderFactory {
 		QueryParameterSetterFactory expressionSetterFactory = QueryParameterSetterFactory.parsing(parser,
 				evaluationContextProvider, parameters);
 
-		QueryParameterSetterFactory basicSetterFactory = QueryParameterSetterFactory.basic(parameters);
+		QueryParameterSetterFactory basicSetterFactory = QueryParameterSetterFactory.basic(parameters,
+				query.hasNamedParameter());
 
 		return new ParameterBinder(parameters, createSetters(bindings, query, expressionSetterFactory, basicSetterFactory),
 				!query.usesPaging());
@@ -103,7 +105,7 @@ class ParameterBinderFactory {
 
 	static List<ParameterBinding> getBindings(JpaParameters parameters) {
 
-		List<ParameterBinding> result = new ArrayList<>();
+		List<ParameterBinding> result = new ArrayList<>(parameters.getNumberOfParameters());
 		int bindableParameterIndex = 0;
 
 		for (JpaParameter parameter : parameters) {
@@ -141,7 +143,7 @@ class ParameterBinderFactory {
 
 		for (QueryParameterSetterFactory strategy : strategies) {
 
-			QueryParameterSetter setter = strategy.create(binding, declaredQuery);
+			QueryParameterSetter setter = strategy.create(binding);
 
 			if (setter != null) {
 				return setter;

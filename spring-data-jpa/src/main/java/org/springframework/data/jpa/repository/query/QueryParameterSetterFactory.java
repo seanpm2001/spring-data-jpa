@@ -23,7 +23,6 @@ import java.util.function.Function;
 import org.springframework.data.jpa.repository.query.JpaParameters.JpaParameter;
 import org.springframework.data.jpa.repository.query.ParameterBinding.BindingIdentifier;
 import org.springframework.data.jpa.repository.query.ParameterBinding.MethodInvocationArgument;
-import org.springframework.data.jpa.repository.query.QueryParameterSetter.NamedOrIndexedQueryParameterSetter;
 import org.springframework.data.repository.query.Parameter;
 import org.springframework.data.repository.query.Parameters;
 import org.springframework.data.repository.query.QueryMethodEvaluationContextProvider;
@@ -45,20 +44,25 @@ import org.springframework.util.Assert;
  */
 abstract class QueryParameterSetterFactory {
 
+	/**
+	 * Creates a {@link QueryParameterSetter} for the given {@link ParameterBinding}. This factory may return
+	 * {@literal null} if it doesn't support the given {@link ParameterBinding}.
+	 *
+	 * @param binding the parameter binding to create a {@link QueryParameterSetter} for.
+	 * @return
+	 */
 	@Nullable
-	abstract QueryParameterSetter create(ParameterBinding binding, DeclaredQuery declaredQuery);
+	abstract QueryParameterSetter create(ParameterBinding binding);
 
 	/**
 	 * Creates a new {@link QueryParameterSetterFactory} for the given {@link JpaParameters}.
 	 *
 	 * @param parameters must not be {@literal null}.
+	 * @param preferNamedParameters whether to prefer named parameters.
 	 * @return a basic {@link QueryParameterSetterFactory} that can handle named and index parameters.
 	 */
-	static QueryParameterSetterFactory basic(JpaParameters parameters) {
-
-		Assert.notNull(parameters, "JpaParameters must not be null");
-
-		return new BasicQueryParameterSetterFactory(parameters);
+	static QueryParameterSetterFactory basic(JpaParameters parameters, boolean preferNamedParameters) {
+		return new BasicQueryParameterSetterFactory(parameters, preferNamedParameters);
 	}
 
 	/**
@@ -68,9 +72,6 @@ abstract class QueryParameterSetterFactory {
 	 * @return a {@link QueryParameterSetterFactory} for Part-Tree Queries.
 	 */
 	static QueryParameterSetterFactory forPartTreeQuery(JpaParameters parameters) {
-
-		Assert.notNull(parameters, "JpaParameters must not be null");
-
 		return new PartTreeQueryParameterSetterFactory(parameters);
 	}
 
@@ -96,11 +97,6 @@ abstract class QueryParameterSetterFactory {
 	 */
 	static QueryParameterSetterFactory parsing(SpelExpressionParser parser,
 			QueryMethodEvaluationContextProvider evaluationContextProvider, Parameters<?, ?> parameters) {
-
-		Assert.notNull(parser, "SpelExpressionParser must not be null");
-		Assert.notNull(evaluationContextProvider, "EvaluationContextProvider must not be null");
-		Assert.notNull(parameters, "Parameters must not be null");
-
 		return new ExpressionBasedQueryParameterSetterFactory(parser, evaluationContextProvider, parameters);
 	}
 
@@ -119,7 +115,7 @@ abstract class QueryParameterSetterFactory {
 				? parameter.getRequiredTemporalType() //
 				: null;
 
-		return new NamedOrIndexedQueryParameterSetter(valueExtractor.andThen(binding::prepare),
+		return QueryParameterSetter.create(valueExtractor.andThen(binding::prepare),
 				ParameterImpl.of(parameter, binding), temporalType);
 	}
 
@@ -189,7 +185,7 @@ abstract class QueryParameterSetterFactory {
 
 		@Nullable
 		@Override
-		public QueryParameterSetter create(ParameterBinding binding, DeclaredQuery declaredQuery) {
+		public QueryParameterSetter create(ParameterBinding binding) {
 
 			if (!(binding.getOrigin() instanceof ParameterBinding.Expression e)) {
 				return null;
@@ -225,7 +221,7 @@ abstract class QueryParameterSetterFactory {
 	private static class SyntheticParameterSetterFactory extends QueryParameterSetterFactory {
 
 		@Override
-		public QueryParameterSetter create(ParameterBinding binding, DeclaredQuery declaredQuery) {
+		public QueryParameterSetter create(ParameterBinding binding) {
 
 			if (!(binding.getOrigin() instanceof ParameterBinding.Synthetic s)) {
 				return null;
@@ -246,19 +242,22 @@ abstract class QueryParameterSetterFactory {
 	private static class BasicQueryParameterSetterFactory extends QueryParameterSetterFactory {
 
 		private final JpaParameters parameters;
+		private final boolean preferNamedParameters;
 
 		/**
 		 * @param parameters must not be {@literal null}.
+		 * @param preferNamedParameters whether to use named parameters.
 		 */
-		BasicQueryParameterSetterFactory(JpaParameters parameters) {
+		BasicQueryParameterSetterFactory(JpaParameters parameters, boolean preferNamedParameters) {
 
 			Assert.notNull(parameters, "JpaParameters must not be null");
 
 			this.parameters = parameters;
+			this.preferNamedParameters = preferNamedParameters;
 		}
 
 		@Override
-		public QueryParameterSetter create(ParameterBinding binding, DeclaredQuery declaredQuery) {
+		public QueryParameterSetter create(ParameterBinding binding) {
 
 			Assert.notNull(binding, "Binding must not be null");
 
@@ -269,7 +268,7 @@ abstract class QueryParameterSetterFactory {
 			BindingIdentifier identifier = mia.identifier();
 			JpaParameter parameter;
 
-			if (declaredQuery.hasNamedParameter()) {
+			if (preferNamedParameters) {
 				parameter = findParameterForBinding(parameters, identifier.getName());
 			} else {
 				parameter = findParameterForBinding(parameters, identifier.getPosition() - 1);
@@ -297,12 +296,12 @@ abstract class QueryParameterSetterFactory {
 		private final JpaParameters parameters;
 
 		private PartTreeQueryParameterSetterFactory(JpaParameters parameters) {
-			super(parameters);
+			super(parameters, false);
 			this.parameters = parameters.getBindableParameters();
 		}
 
 		@Override
-		public QueryParameterSetter create(ParameterBinding binding, DeclaredQuery declaredQuery) {
+		public QueryParameterSetter create(ParameterBinding binding) {
 
 			if (!binding.getOrigin().isMethodArgument()) {
 				return null;
@@ -325,7 +324,7 @@ abstract class QueryParameterSetterFactory {
 					return QueryParameterSetter.NOOP;
 				}
 
-				return super.create(binding, declaredQuery);
+				return super.create(binding);
 			}
 
 			return null;
@@ -372,7 +371,6 @@ abstract class QueryParameterSetterFactory {
 		public Class<T> getParameterType() {
 			return parameterType;
 		}
-
 	}
 
 }

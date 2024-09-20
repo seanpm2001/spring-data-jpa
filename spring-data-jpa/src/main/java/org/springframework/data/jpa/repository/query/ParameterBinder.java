@@ -21,6 +21,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.query.QueryParameterSetter.ErrorHandling;
 import org.springframework.data.jpa.support.PageableUtils;
 import org.springframework.util.Assert;
+import org.springframework.util.ErrorHandler;
 
 /**
  * {@link ParameterBinder} is used to bind method parameters to a {@link Query}. This is usually done whenever an
@@ -33,9 +34,7 @@ import org.springframework.util.Assert;
  * @author Jens Schauder
  * @author Yanming Zhou
  */
-// TODO: Refactor, do not create a QueryParameterSetter for each parameter but capture strategies and bindings for more
-// efficient binding.
-public class ParameterBinder {
+class ParameterBinder {
 
 	static final String PARAMETER_NEEDS_TO_BE_NAMED = "For queries with named parameters you need to provide names for method parameters; Use @Param for query method parameters, or when on Java 8+ use the javac flag -parameters";
 
@@ -82,10 +81,10 @@ public class ParameterBinder {
 	}
 
 	public void bind(QueryParameterSetter.BindableQuery query, JpaParametersParameterAccessor accessor,
-			ErrorHandling errorHandling) {
+			ErrorHandler errorHandler) {
 
 		for (QueryParameterSetter setter : parameterSetters) {
-			setter.setParameter(query, accessor, errorHandling);
+			setter.setParameter(query, accessor, errorHandler);
 		}
 	}
 
@@ -93,7 +92,6 @@ public class ParameterBinder {
 	 * Binds the parameters to the given query and applies special parameter types (e.g. pagination).
 	 *
 	 * @param query must not be {@literal null}.
-	 * @param metadata must not be {@literal null}.
 	 * @param accessor must not be {@literal null}.
 	 */
 	Query bindAndPrepare(Query query,
