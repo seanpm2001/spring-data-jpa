@@ -62,54 +62,52 @@ class ParameterMetadataProvider {
 	private final @Nullable Iterator<Object> bindableParameterValues;
 	private final EscapeCharacter escape;
 	private final JpqlQueryTemplates templates;
+	private final JpaParameters jpaParameters;
 	private int position;
 
 	/**
 	 * Creates a new {@link ParameterMetadataProvider} from the given {@link CriteriaBuilder} and
 	 * {@link ParametersParameterAccessor}.
 	 *
-	 * @param builder must not be {@literal null}.
 	 * @param accessor must not be {@literal null}.
 	 * @param escape must not be {@literal null}.
 	 * @param templates must not be {@literal null}.
 	 */
-	public ParameterMetadataProvider(CriteriaBuilder builder, ParametersParameterAccessor accessor,
+	public ParameterMetadataProvider(JpaParametersParameterAccessor accessor,
 			EscapeCharacter escape, JpqlQueryTemplates templates) {
-		this(builder, accessor.iterator(), accessor.getParameters(), escape, templates);
+		this(accessor.iterator(), accessor.getParameters(), escape, templates);
 	}
 
 	/**
 	 * Creates a new {@link ParameterMetadataProvider} from the given {@link CriteriaBuilder} and {@link Parameters} with
 	 * support for parameter value customizations via {@link PersistenceProvider}.
 	 *
-	 * @param builder must not be {@literal null}.
 	 * @param parameters must not be {@literal null}.
 	 * @param escape must not be {@literal null}.
 	 * @param templates must not be {@literal null}.
 	 */
-	public ParameterMetadataProvider(CriteriaBuilder builder, Parameters<?, ?> parameters, EscapeCharacter escape,
+	public ParameterMetadataProvider(JpaParameters parameters, EscapeCharacter escape,
 			JpqlQueryTemplates templates) {
-		this(builder, null, parameters, escape, templates);
+		this(null, parameters, escape, templates);
 	}
 
 	/**
 	 * Creates a new {@link ParameterMetadataProvider} from the given {@link CriteriaBuilder} an {@link Iterable} of all
 	 * bindable parameter values, and {@link Parameters}.
 	 *
-	 * @param builder must not be {@literal null}.
 	 * @param bindableParameterValues may be {@literal null}.
 	 * @param parameters must not be {@literal null}.
 	 * @param escape must not be {@literal null}.
 	 * @param templates must not be {@literal null}.
 	 */
-	private ParameterMetadataProvider(CriteriaBuilder builder, @Nullable Iterator<Object> bindableParameterValues,
-			Parameters<?, ?> parameters, EscapeCharacter escape, JpqlQueryTemplates templates) {
+	private ParameterMetadataProvider(@Nullable Iterator<Object> bindableParameterValues, JpaParameters parameters,
+			EscapeCharacter escape, JpqlQueryTemplates templates) {
 
-		Assert.notNull(builder, "CriteriaBuilder must not be null");
 		Assert.notNull(parameters, "Parameters must not be null");
 		Assert.notNull(escape, "EscapeCharacter must not be null");
 		Assert.notNull(templates, "JpqlQueryTemplates must not be null");
 
+		this.jpaParameters = parameters;
 		this.parameters = parameters.getBindableParameters().iterator();
 		this.bindings = new ArrayList<>();
 		this.bindableParameterValues = bindableParameterValues;
@@ -205,6 +203,10 @@ class ParameterMetadataProvider {
 		int currentPosition = ++position;
 
 		return new ParameterBinding(BindingIdentifier.of(currentPosition), ParameterOrigin.synthetic(value, source));
+	}
+
+	public JpaParameters getParameters() {
+		return this.jpaParameters;
 	}
 
 	/**

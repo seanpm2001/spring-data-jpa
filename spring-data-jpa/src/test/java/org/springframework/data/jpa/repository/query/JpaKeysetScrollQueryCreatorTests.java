@@ -65,7 +65,7 @@ class JpaKeysetScrollQueryCreatorTests {
 				new SpelAwareProxyProjectionFactory(), provider);
 
 		PartTree tree = new PartTree("findTop3ByFirstnameStartingWithOrderByFirstnameAscEmailAddressAsc", User.class);
-		ParameterMetadataProvider metadataProvider = new ParameterMetadataProvider(entityManager.getCriteriaBuilder(),
+		ParameterMetadataProvider metadataProvider = new ParameterMetadataProvider(
 				queryMethod.getParameters(), EscapeCharacter.DEFAULT, JpqlQueryTemplates.UPPER);
 
 		JpaMetamodelEntityInformation<User, User> entityInformation = new JpaMetamodelEntityInformation<>(User.class,

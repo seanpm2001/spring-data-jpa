@@ -18,8 +18,6 @@ package org.springframework.data.jpa.repository.query;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import jakarta.persistence.criteria.CriteriaBuilder;
-
 import java.util.Collections;
 
 import org.eclipse.persistence.internal.jpa.querydef.ParameterExpressionImpl;
@@ -32,7 +30,6 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 import org.springframework.data.jpa.repository.support.JpqlQueryTemplates;
-import org.springframework.data.repository.query.Parameters;
 import org.springframework.data.repository.query.parser.Part;
 
 /**
@@ -53,12 +50,10 @@ class ParameterMetadataProviderUnitTests {
 	@Test // DATAJPA-863
 	void errorMessageMentionsParametersWhenParametersAreExhausted() {
 
-		CriteriaBuilder builder = mock(CriteriaBuilder.class);
-
-		Parameters<?, ?> parameters = mock(Parameters.class, RETURNS_DEEP_STUBS);
+		JpaParameters parameters = mock(JpaParameters.class, RETURNS_DEEP_STUBS);
 		when(parameters.getBindableParameters().iterator()).thenReturn(Collections.emptyListIterator());
 
-		ParameterMetadataProvider metadataProvider = new ParameterMetadataProvider(builder, parameters,
+		ParameterMetadataProvider metadataProvider = new ParameterMetadataProvider(parameters,
 				EscapeCharacter.DEFAULT, JpqlQueryTemplates.UPPER);
 
 		assertThatExceptionOfType(RuntimeException.class) //

@@ -34,7 +34,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.JpaSort;
 import org.springframework.data.jpa.repository.query.JpqlQueryBuilder.PathAndOrigin;
 import org.springframework.data.jpa.repository.query.ParameterBinding.PartTreeParameterBinding;
-import org.springframework.data.jpa.repository.query.ParameterMetadataProvider.ParameterMetadata;
 import org.springframework.data.jpa.repository.support.JpqlQueryTemplates;
 import org.springframework.data.mapping.PropertyPath;
 import org.springframework.data.mapping.PropertyReferenceException;
@@ -58,7 +57,7 @@ import org.springframework.util.Assert;
  * @author Andrey Kovalev
  * @author Greg Turnquist
  */
-class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuilder.Predicate> {
+class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuilder.Predicate> implements JpqlQueryCreator {
 
 	private final ReturnedType returnedType;
 	private final ParameterMetadataProvider provider;
@@ -111,6 +110,11 @@ class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuilder.Pred
 	 */
 	public List<ParameterBinding> getBindings() {
 		return provider.getBindings();
+	}
+
+	@Override
+	public ParameterBinder getBinder() {
+		return ParameterBinderFactory.createBinder(provider.getParameters(), getBindings());
 	}
 
 	@Override
@@ -258,10 +262,6 @@ class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuilder.Pred
 		return "?" + position;
 	}
 
-	private String render(ParameterMetadata metadata) {
-		return render(metadata.getPosition());
-	}
-
 	/**
 	 * Creates a {@link Predicate} from the given {@link Part}.
 	 *
@@ -278,7 +278,6 @@ class JpaQueryCreator extends AbstractQueryCreator<String, JpqlQueryBuilder.Pred
 	 * @author Phil Webb
 	 * @author Oliver Gierke
 	 */
-	@SuppressWarnings({ "rawtypes" })
 	private class PredicateBuilder {
 
 		private final Part part;

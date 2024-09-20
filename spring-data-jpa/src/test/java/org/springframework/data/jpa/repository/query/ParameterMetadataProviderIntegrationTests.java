@@ -81,7 +81,7 @@ class ParameterMetadataProviderIntegrationTests {
 		JpaParameters parameters = new JpaParameters(ParametersSource.of(method));
 		simulateDiscoveredParametername(parameters);
 
-		return new ParameterMetadataProvider(em.getCriteriaBuilder(), parameters, EscapeCharacter.DEFAULT,
+		return new ParameterMetadataProvider(parameters, EscapeCharacter.DEFAULT,
 				JpqlQueryTemplates.UPPER);
 	}
 

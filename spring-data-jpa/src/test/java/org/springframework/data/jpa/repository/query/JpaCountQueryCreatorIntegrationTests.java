@@ -59,7 +59,7 @@ class JpaCountQueryCreatorIntegrationTests {
 				AbstractRepositoryMetadata.getMetadata(SomeRepository.class), new SpelAwareProxyProjectionFactory(), provider);
 
 		PartTree tree = new PartTree("findDistinctByRolesIn", User.class);
-		ParameterMetadataProvider metadataProvider = new ParameterMetadataProvider(entityManager.getCriteriaBuilder(),
+		ParameterMetadataProvider metadataProvider = new ParameterMetadataProvider(
 				queryMethod.getParameters(), EscapeCharacter.DEFAULT, JpqlQueryTemplates.UPPER);
 
 		JpaCountQueryCreator creator = new JpaCountQueryCreator(tree, queryMethod.getResultProcessor().getReturnedType(),
