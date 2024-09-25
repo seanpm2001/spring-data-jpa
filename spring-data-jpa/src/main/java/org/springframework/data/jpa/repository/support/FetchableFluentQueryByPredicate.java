@@ -219,7 +219,7 @@ class FetchableFluentQueryByPredicate<S, R> extends FluentQuerySupport<S, R> imp
 
 		List<String> inputProperties = returnedType.getInputProperties();
 
-		if (returnedType.needsCustomConstruction() && !inputProperties.isEmpty()) {
+		if (returnedType.needsCustomConstruction()) {
 
 			Collection<String> requiredSelection;
 			if (scrollPosition instanceof KeysetScrollPosition && returnedType.getReturnedType().isInterface()) {

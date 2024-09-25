@@ -772,7 +772,7 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 
 		List<String> inputProperties = returnedType.getInputProperties();
 
-		if (returnedType.needsCustomConstruction() && !inputProperties.isEmpty()) {
+		if (returnedType.needsCustomConstruction()) {
 			query = (CriteriaQuery) (returnedType.getReturnedType().isInterface() ? builder.createTupleQuery()
 					: builder.createQuery(returnedType.getReturnedType()));
 		} else {
@@ -781,7 +781,7 @@ public class SimpleJpaRepository<T, ID> implements JpaRepositoryImplementation<T
 
 		Root<S> root = applySpecificationToCriteria(spec, domainClass, query);
 
-		if (returnedType.needsCustomConstruction() && !inputProperties.isEmpty()) {
+		if (returnedType.needsCustomConstruction()) {
 
 			Collection<String> requiredSelection;
 
